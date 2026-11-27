@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kemu"
+version = "0.1.0"
+description = "Cadence Palladium Z2/Z3 (ICE & IXCOM/SA) orchestration tool"
+readme = "PLAN.md"
+requires-python = ">=3.11"
+dependencies = [
+  "jinja2>=3.1",
+]
+
+[project.scripts]
+kemu = "kemu_src.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kemu_src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
