@@ -1,0 +1,9 @@
+{## =========================================================================== ##}
+{## Stage: ICE PRECOMP — keepNets.qel                                           ##}
+{## Reference: xecmdref.pdf "keepNet" (P374-P375), WXE 24.05                    ##}
+{## =========================================================================== ##}
+# Auto-generated Palladium ICE keepNet list for {{ db_name }}
+
+{% for net in keep_nets %}
+keepNet -add {{ net }}
+{% endfor %}

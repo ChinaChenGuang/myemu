@@ -1,0 +1,20 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: ICE Analysis — VHDL (vavhdl)                                         ##}
+{## Reference: compileICE.pdf "vavhdl" (P52-P54), WXE 24.05                    ##}
+{## =========================================================================== ##}
+{{ cmd | default('vavhdl') }} \
+  -logFile analysis_{{ module_name }}_vhdl.log \
+  -db2 \
+  {{ vhdl_std | default('-V2008') }} \
+  -work {{ worklib }} \
+  -vaLib {{ valib | default('va.lib') }} \
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+{% for fl in filelists %}
+  -file {{ fl }}{% if not loop.last %} \{% endif %}
+
+{% endfor %}
+set rc = $status
+if ( $rc != 0 ) exit $rc

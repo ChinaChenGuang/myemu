@@ -1,0 +1,29 @@
+{## Golden: Cadence pdapp2506 hdpcie5 gen5_comp.qel & run.qel ##}
+{% macro compile(SB_DIR, EMU_HOST, ITEMS) %}
+source "{{ SB_DIR }}/global_pciesb_wrapper.qel"
+source "{{ SB_DIR }}/pciesb_keepnets.qel"
+{% for item in ITEMS %}
+pciesb_wrapper_add_TERMs {{ item.inst }}
+pciesb_keepnets {{ item.inst }}
+{% endfor %}
+source "{{ SB_DIR }}/type_pciesb_wrapper.qel"
+{% for item in ITEMS %}
+targetLocation -add loc_PCIESB_GEN5_{{ loop.index0 }} type_PCIESB_GEN5 {{ EMU_HOST }} {{ item.loc_port }}
+pciesb_wrapper_inst_to_loc {{ item.inst }} loc_PCIESB_GEN5_{{ loop.index0 }}
+{% endfor %}
+{% endmacro %}
+
+{% macro sim_relocate(EMU_HOST, ITEMS) %}
+{% for item in ITEMS %}
+targetLocation -add loc_PCIESB_GEN5_{{ loop.index0 }} type_PCIESB_GEN5 {{ EMU_HOST }} {{ item.reloc_port }}
+targetAssign -add {{ item.inst_id }} loc_PCIESB_GEN5_{{ loop.index0 }}
+{% endfor %}
+{% endmacro %}
+
+{% macro sim_post_download(ITEMS) %}
+sdl -enable
+{% for item in ITEMS %}
+sdl -scope {{ item.inst }}
+sdl -load pciesb_gen5_tlp_mon.tdf
+{% endfor %}
+{% endmacro %}

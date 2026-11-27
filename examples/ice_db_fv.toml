@@ -1,0 +1,74 @@
+# KEMU ICE 后端 Database 独立示例配置（双文件解耦：通过 [database].netlist 复用前端网表）
+# 输出目录：<comdir>/database/base_fv/（读取 <comdir>/netlist/soc_rtl_v1/netlist_manifest.toml）
+
+[env]
+emu_root = '/proj/soc/emu'
+setup_scripts = ['$EMU_ROOT/env/setup_palladium.csh']
+bsub = false
+queues = ['verif_r8', 'design_r8']
+
+[env.vars]
+XE_NOECHO = '1'
+XE_ICE_FAST_DOWNLOAD = '1'
+
+[emulator]
+active = 'horizon_z2'
+target_system = 'Z2'
+
+[emulator.machines]
+horizon_z2 = { host = 'horizon_z2', et3confg = '/match3/scd.et3confg' }
+emu_z2 = { host = 'emu_z2', et3confg = 'match3/scd.et3confg.emu_z2' }
+
+[database]
+name = 'base_fv'
+netlist = 'soc_rtl_v1'
+desc = 'FV debug database reusing soc_rtl_v1'
+
+[precomp]
+clocks_qel = '$EMU_ROOT/qel/clocks.qel'
+keep_nets = ['dut_top.clk_gen.*']
+precompile_options = ['asyncReset']
+# module_stubs = ['gpu_core']           # 可选：1 份网表拆多 DB 时按模块裁剪（moduleStub）
+# instance_stubs = ['dut_top.u_npu']    # 可选：按层次实例路径裁剪（instanceStub）
+
+[comp]
+flow = 'unified'
+compiler_options = ['visionMode FV']
+boards = '0-5'
+# symmetric_boards = '0-17'
+# target_compile_scripts = ['$EMU_ROOT/qel/target_assign.qel']
+# ice_prepare = false
+
+[sim]
+tcl_file = '$EMU_ROOT/sim/run_ice.tcl'
+opts = ['-fsdb']
+pm_mode = 'la'
+run_cmd = 'run'
+auto_exit = true
+
+[sim.wave]
+enable = true
+mode = 'offline'
+name = 'wave'
+continuous_upload = true
+time_unit = 'ns'
+trigger_pos = 50
+probe_scripts = [
+  '$EMU_ROOT/sim/probes_clk.tcl',
+  '$EMU_ROOT/sim/probes_cpu.tcl',
+]
+probes = [
+  'probe -create -depth 2 tb_top.u_dut',
+]
+
+[sim.tdf]
+scope = 'tb_top.u_dut'
+triggers = [
+  'err_flag == 1',
+]
+halt_on_trigger = true
+
+[release]
+dest_dir = '$EMU_ROOT/release'
+include = ['xe_db', 'import.qel', 'precompile.qel', 'compile.qel', 'sim.csh']
+exclude = ['*.tmp', '*.bak']

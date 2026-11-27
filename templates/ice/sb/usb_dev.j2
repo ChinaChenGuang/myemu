@@ -1,0 +1,27 @@
+{## Golden: Cadence pdapp2506 hdusbdevice .lib/compile.qel & targetRelocate.qel ##}
+{% macro compile(SB_DIR, EMU_HOST, ITEMS) %}
+source "{{ SB_DIR }}/global_usb3d_bbox.qel"
+{% for item in ITEMS %}
+usb3d_bbox_add_TERMs {{ item.inst }}
+{% endfor %}
+source "{{ SB_DIR }}/usb3d_constraints.qel"
+source "{{ SB_DIR }}/usb3d_virtual.qel"
+{% for item in ITEMS %}
+targetLocation -add usb3DevSB_{{ loop.index0 }} usb3Dev {{ EMU_HOST }} {{ item.loc_port }}
+targetInst -add usb3d_sb_{{ loop.index0 }} usb3DevSB_{{ loop.index0 }}
+usb3d_sb_wrapper_inst_to_vr {{ item.inst }} usb3d_sb_{{ loop.index0 }}
+targetInst -apply usb3d_sb_{{ loop.index0 }}
+{% endfor %}
+{% endmacro %}
+
+{% macro sim_relocate(EMU_HOST, ITEMS) %}
+{% for item in ITEMS %}
+targetLocation -add usb3DevSB_{{ loop.index0 }} usb3Dev {{ EMU_HOST }} {{ item.reloc_port }}
+targetAssign -add usb3d_sb_{{ loop.index0 }} usb3DevSB_{{ loop.index0 }}
+{% endfor %}
+{% endmacro %}
+
+{% macro sim_post_download(ITEMS) %}
+sdl -setFile usbd_utmi_ulpi_monitor.tdf
+sdl -enable
+{% endmacro %}

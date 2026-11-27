@@ -1,0 +1,25 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: ICE Elaborate — HDL-ICE Synthesis (vaelab)                           ##}
+{## Reference: compileICE.pdf "vaelab" (P58-P68), WXE 24.05                    ##}
+{## =========================================================================== ##}
+{{ cmd | default('vaelab') }} {{ top_module }} \
+  -logFile elaborate_{{ top_module }}.log \
+  -outputVlog {{ netlist_name | default(top_module) }}.vg \
+  -vaLib {{ valib | default('va.lib') }} \
+{% if platform %}
+  -Platform {{ platform }} \
+{% endif %}
+{% if ref_libs %}
+  -refLib "{{ ref_libs | join(' ') }}" \
+{% endif %}
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+  -keepAllFlipFlop
+set rc = $status
+if ( $rc != 0 ) exit $rc
+{% for line in extra_lines %}
+{{ line }}
+if ( $status != 0 ) exit $status
+{% endfor %}

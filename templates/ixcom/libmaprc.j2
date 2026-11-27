@@ -1,0 +1,10 @@
+{## =========================================================================== ##}
+{## IXCOM Library Mapping File (libmaprc)                                     ##}
+{## Reference: compileIXCOM.pdf "Using libmaprc Files" (P32-P34), WXE 24.05    ##}
+{## =========================================================================== ##}
+{% if default_libmaprc %}
+include {{ default_libmaprc }}
+{% endif %}
+{% for lib in worklibs %}
+{{ lib.name }} => {{ lib.path }}
+{% endfor %}

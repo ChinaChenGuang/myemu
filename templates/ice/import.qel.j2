@@ -1,0 +1,18 @@
+{## =========================================================================== ##}
+{## Stage: ICE IMPT — Gate-Level Netlist Import into QTDB (xeCompile)           ##}
+{## Reference: xecmdref.pdf P230-P232, compileICE.pdf P17-P18, emulator.pdf P123##}
+{## =========================================================================== ##}
+importOption {mode {{ import_mode | default('full') }}}
+importOption {protection on}
+importOption {library {{ design_lib }}}
+{% for line in import_options %}
+{{ line }}
+{% endfor %}
+{% for line in extra_netlists %}
+{{ line }}
+{% endfor %}
+{% for netlist_path in netlist_files %}
+netlistFile {verilog {{ netlist_path }}{% if not netlist_path.endswith('.vg') %}.vg{% endif %}}
+{% endfor %}
+refLib {{ ref_libs | default(['qtref', 'generic']) | join(' ') }}
+designImport{% if use_lsf %} -useLSF{% endif %}

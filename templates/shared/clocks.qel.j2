@@ -1,0 +1,251 @@
+{## =========================================================================== ##}
+{## Shared Clock Configuration Template (ICE xeCompile & IXCOM ixclkgen)        ##}
+{## Output: flat clocks.qel (no Tcl control flow, 100% ixclkgen-compatible)    ##}
+{## Context variables:                                                          ##}
+{##   CFG_NAME     - Target name (e.g. "db.eth", "net.full_chip_ixcom")         ##}
+{##   FLOW_MODE    - "ice" or "ixcom"                                           ##}
+{##   ENV_MAP      - Dict of target env_map flags (e.g. {"PD_DDR6400": "1"})   ##}
+{##   SPEEDBRIDGES - List of enabled SpeedBridges (e.g. ["eth_10g", "pcie5"])  ##}
+{##   PLL          - Golden PLL frequencies loaded from Excel clock_plan        ##}
+{## =========================================================================== ##}
+# Auto-generated flat clock configuration for {{ CFG_NAME }} ({{ FLOW_MODE }})
+
+# ------------------------------------------------------------------------------
+# Baseline Clock Options
+# ------------------------------------------------------------------------------
+{% if ENV_MAP.get("PD_CAKE") == "1" -%}
+clockOption -add {technology CAKE 1}
+{% else -%}
+clockOption -add {technology CAKE 2}
+{% endif -%}
+clockOption -add {activeEdge positive}
+{% set uart_clk = ENV_MAP.get("PD_UART_CLK", "3000") -%}
+{% if "PD_MCU_UART0_PRINT" in ENV_MAP or "PD_MCU_UART1_PRINT" in ENV_MAP %}
+
+# ------------------------------------------------------------------------------
+# 1. UARTs (Debug)
+# ------------------------------------------------------------------------------
+{% if "PD_MCU_UART0_PRINT" in ENV_MAP -%}
+clockFrequency -add {u_sigi_top.u_digital_top.u_mcu_subsys_top_pwr_wrap.u_mcu_subsys_top_wrap.u_mcu_subsys_top.u_mcu_xcu.u_mcu_xcu_peri_wrap.u_mcu_xcu_apb_dec2.u_uart0.sclk {{ uart_clk }}}
+{% endif -%}
+{% if "PD_MCU_UART1_PRINT" in ENV_MAP -%}
+clockFrequency -add {u_sigi_top.u_digital_top.u_mcu_subsys_top_pwr_wrap.u_mcu_subsys_top_wrap.u_mcu_subsys_top.u_mcu_xcu.u_mcu_xcu_peri_wrap.u_mcu_xcu_apb_dec2.u_uart1.sclk {{ uart_clk }}}
+{% endif -%}
+{% endif -%}
+{% if "PD_BASE" in ENV_MAP %}
+
+# ------------------------------------------------------------------------------
+# 2. BASE (Oscillators, HSI, MB, MT, MM, CPU0, CMN, MCU, L2SRAM)
+# ------------------------------------------------------------------------------
+# --- Oscillators & IO Clocks ---
+clockFrequency -add {mclk 200MHz}
+clockFrequency -add {CLKIN_40M 40MHz}
+clockFrequency -add {u_sigi_top.u_digital_top.u_mcu_subsys_top_pwr_wrap.u_mcu_subsys_top_wrap.u_mcu_subsys_top.u_mcu_xcu.u_mcu_xcu_peri_wrap.u_io_mcu_wrapper.u_pad_wrap.u_io_pad_pg2.CLKIN_40M_i 40MHz}
+clockFrequency -add {CLKIN_26M 26MHz}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.CLKIN_26M_int_o 26MHz}
+clockFrequency -add {CLKIN_32K 32kHz}
+clockFrequency -add {u_sigi_top.u_digital_top.u_aon_subsys_top_pwr_wrap.u_io_aon_wrapper.u_io_pad_pg3.CLKIN_32K_i 32kHz}
+
+# --- Media Subsystem PLLs (MB, MT, MM) ---
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_mb_pll_prediv_wrapper.u_mb_ana_clk_wrapper.u_mbpll0_aks_dphypll_ns.clkout0 {{ PLL.MBPLL0.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_mb_pll_prediv_wrapper.u_mb_ana_clk_wrapper.u_mbpll0_aks_dphypll_ns.pll_clkout_gp {{ PLL.MBPLL0.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_mb_pll_prediv_wrapper.u_mb_ana_clk_wrapper.u_mbpll1_aks_dphypll_ns.clkout0 {{ PLL.MBPLL1.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_mb_pll_prediv_wrapper.u_mb_ana_clk_wrapper.u_mbpll1_aks_dphypll_ns.pll_clkout_gp {{ PLL.MBPLL1.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_top.u_mt_pll_prediv_wrapper.u_mt_ana_clk_wrapper.u_mtpll_aks_dphypll_ns.clkout0 {{ PLL.MTPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_top.u_mt_pll_prediv_wrapper.u_mt_ana_clk_wrapper.u_mtpll_aks_dphypll_ns.pll_clkout_gp {{ PLL.MTPLL.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_mm_pll_prediv_wrapper.u_mm_ana_clk_wrapper.u_mmpll_aks_dphypll_ns.clkout0 {{ PLL.MMPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_mm_pll_prediv_wrapper.u_mm_ana_clk_wrapper.u_mmpll_aks_dphypll_ns.pll_clkout_gp {{ PLL.MMPLL.gp }}}
+
+# --- CPU0 (MP4) ---
+clockFrequency -add {u_sigi_top.u_digital_top.u_cpu0_mp4_subsys_top_pwr_wrap.u_cpu_pll_prediv_wrapper.u_cpu_ana_clk_wrapper.u_cpupll0_aks_dphypll_ns.clkout0 {{ PLL.CPUPLL0.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_cpu0_mp4_subsys_top_pwr_wrap.u_cpu_pll_prediv_wrapper.u_cpu_ana_clk_wrapper.u_cpupll0_aks_dphypll_ns.pll_clkout_gp {{ PLL.CPUPLL0.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_cpu0_mp4_subsys_top_pwr_wrap.u_cpu_pll_prediv_wrapper.u_cpu_ana_clk_wrapper.u_cpupll1_aks_dphypll_ns.clkout0 {{ PLL.CPUPLL1.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_cpu0_mp4_subsys_top_pwr_wrap.u_cpu_pll_prediv_wrapper.u_cpu_ana_clk_wrapper.u_cpupll1_aks_dphypll_ns.pll_clkout_gp {{ PLL.CPUPLL1.gp }}}
+
+# --- CMN Interconnect ---
+clockFrequency -add {u_sigi_top.u_digital_top.u_cmn_blk1.u_cmn_pll_prediv_wrapper.u_cmn_ana_clk_wrapper.u_cmnpll_aks_dphypll_ns.clkout0 {{ PLL.CMNPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_cmn_blk1.u_cmn_pll_prediv_wrapper.u_cmn_ana_clk_wrapper.u_cmnpll_aks_dphypll_ns.pll_clkout_gp {{ PLL.CMNPLL.gp }}}
+
+# --- MCU & MCUPERI PLLs ---
+clockFrequency -add {u_sigi_top.u_digital_top.u_mcu_subsys_top_pwr_wrap.u_mcu_subsys_top_wrap.u_mcu_subsys_top.u_mcu_pll_prediv_wrapper.u_mcu_ana_clk_wrapper.u_mcupll_aks_dphypll_ns.clkout0 {{ PLL.MCUPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_mcu_subsys_top_pwr_wrap.u_mcu_subsys_top_wrap.u_mcu_subsys_top.u_mcu_pll_prediv_wrapper.u_mcu_ana_clk_wrapper.u_mcupll_aks_dphypll_ns.pll_clkout_gp {{ PLL.MCUPLL.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_mcu_subsys_top_pwr_wrap.u_mcu_subsys_top_wrap.u_mcu_subsys_top.u_mcuperi_pll_prediv_wrapper.u_mcuperi_ana_clk_wrapper.u_mcu_peripll_aks_dphypll_ns.clkout0 {{ PLL.MCU_PERIPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_mcu_subsys_top_pwr_wrap.u_mcu_subsys_top_wrap.u_mcu_subsys_top.u_mcuperi_pll_prediv_wrapper.u_mcuperi_ana_clk_wrapper.u_mcu_peripll_aks_dphypll_ns.pll_clkout_gp {{ PLL.MCU_PERIPLL.gp }}}
+
+# --- L2SRAM (cmn_blk1 / cmn_blk3) ---
+clockFrequency -add {u_sigi_top.u_digital_top.u_cmn_blk1.u_sram_pll_prediv_wrapper.u_sram_ana_clk_wrapper.u_srampll_aks_dphypll_ns.clkout0 {{ PLL.SRAMPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_cmn_blk1.u_sram_pll_prediv_wrapper.u_sram_ana_clk_wrapper.u_srampll_aks_dphypll_ns.pll_clkout_gp {{ PLL.SRAMPLL.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_cmn_blk3.u_sram_pll_prediv_wrapper.u_sram_ana_clk_wrapper.u_srampll_aks_dphypll_ns.clkout0 {{ PLL.SRAMPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_cmn_blk3.u_sram_pll_prediv_wrapper.u_sram_ana_clk_wrapper.u_srampll_aks_dphypll_ns.pll_clkout_gp {{ PLL.SRAMPLL.gp }}}
+{% endif -%}
+{% if "PD_ISP" in ENV_MAP %}
+
+# ------------------------------------------------------------------------------
+# 3. ISP
+# ------------------------------------------------------------------------------
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_isp_pll_prediv_wrapper.u_isp_ana_clk_wrapper.u_isppll_aks_dphypll_ns.clkout0 {{ PLL.ISPPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_isp_pll_prediv_wrapper.u_isp_ana_clk_wrapper.u_isppll_aks_dphypll_ns.pll_clkout_gp {{ PLL.ISPPLL.gp }}}
+{% endif -%}
+{% if "PD_VDSP" in ENV_MAP %}
+
+# ------------------------------------------------------------------------------
+# 4. VDSP
+# ------------------------------------------------------------------------------
+clockFrequency -add {u_sigi_top.u_digital_top.u_vdsp0_subsys_top_pwr_wrap.u_vdsp_pll_prediv_wrapper.u_vdsp_ana_clk_wrapper.u_vdsppll_aks_dphypll_ns.pll_clkout_gp {{ PLL.VDSPPLL.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_vdsp0_subsys_top_pwr_wrap.u_vdsp_pll_prediv_wrapper.u_vdsp_ana_clk_wrapper.u_vdsppll_aks_dphypll_ns.clkout0 {{ PLL.VDSPPLL.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_vdsp1_subsys_top_pwr_wrap.u_vdsp_pll_prediv_wrapper.u_vdsp_ana_clk_wrapper.u_vdsppll_aks_dphypll_ns.pll_clkout_gp {{ PLL.VDSPPLL.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_vdsp1_subsys_top_pwr_wrap.u_vdsp_pll_prediv_wrapper.u_vdsp_ana_clk_wrapper.u_vdsppll_aks_dphypll_ns.clkout0 {{ PLL.VDSPPLL.clkout0 }}}
+{% endif -%}
+{% if "PD_BPU0" in ENV_MAP or "PD_BPU1" in ENV_MAP or "PD_BPU2" in ENV_MAP or "PD_BPU3" in ENV_MAP %}
+
+# ------------------------------------------------------------------------------
+# 5. BPU Subsystems (BPU0..BPU3)
+# ------------------------------------------------------------------------------
+{% for idx in range(4) -%}
+{% if ("PD_BPU" ~ idx) in ENV_MAP -%}
+clockFrequency -add {u_sigi_top.u_digital_top.u_bpu{{ idx }}_subsys_top_pwr_wrap.u_bpu_pll_prediv_wrapper.u_bpu_ana_clk_wrapper.u_bpupll0_aks_dphypll_ns.clkout0 {{ PLL.BPUPLL0.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_bpu{{ idx }}_subsys_top_pwr_wrap.u_bpu_pll_prediv_wrapper.u_bpu_ana_clk_wrapper.u_bpupll0_aks_dphypll_ns.pll_clkout_gp {{ PLL.BPUPLL0.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_bpu{{ idx }}_subsys_top_pwr_wrap.u_bpu_pll_prediv_wrapper.u_bpu_ana_clk_wrapper.u_bpupll1_aks_dphypll_ns.clkout0 {{ PLL.BPUPLL1.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_bpu{{ idx }}_subsys_top_pwr_wrap.u_bpu_pll_prediv_wrapper.u_bpu_ana_clk_wrapper.u_bpupll1_aks_dphypll_ns.pll_clkout_gp {{ PLL.BPUPLL1.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_bpu{{ idx }}_subsys_top_pwr_wrap.u_bpu_pll_prediv_wrapper.u_bpu_ana_clk_wrapper.u_bpupll2_aks_dphypll_ns.clkout0 {{ PLL.BPUPLL2.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.u_bpu{{ idx }}_subsys_top_pwr_wrap.u_bpu_pll_prediv_wrapper.u_bpu_ana_clk_wrapper.u_bpupll2_aks_dphypll_ns.pll_clkout_gp {{ PLL.BPUPLL2.gp }}}
+{% endif -%}
+{% endfor -%}
+{% endif -%}
+{% if "PD_MP4_CPU1" in ENV_MAP or "PD_MP4_CPU2" in ENV_MAP or "PD_MP4_CPU3" in ENV_MAP or "PD_MP2_CPU4" in ENV_MAP %}
+
+# ------------------------------------------------------------------------------
+# 6. Extra CPU Subsystems (CPU1..CPU4)
+# ------------------------------------------------------------------------------
+{% for flag, inst in [("PD_MP4_CPU1", "u_cpu1_mp4_subsys_top_pwr_wrap"), ("PD_MP4_CPU2", "u_cpu2_mp4_subsys_top_pwr_wrap"), ("PD_MP4_CPU3", "u_cpu3_mp4_subsys_top_pwr_wrap"), ("PD_MP2_CPU4", "u_cpu4_mp2_subsys_top_pwr_wrap")] -%}
+{% if flag in ENV_MAP -%}
+clockFrequency -add {u_sigi_top.u_digital_top.{{ inst }}.u_cpu_pll_prediv_wrapper.u_cpu_ana_clk_wrapper.u_cpupll0_aks_dphypll_ns.clkout0 {{ PLL.CPUPLL0.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.{{ inst }}.u_cpu_pll_prediv_wrapper.u_cpu_ana_clk_wrapper.u_cpupll0_aks_dphypll_ns.pll_clkout_gp {{ PLL.CPUPLL0.gp }}}
+clockFrequency -add {u_sigi_top.u_digital_top.{{ inst }}.u_cpu_pll_prediv_wrapper.u_cpu_ana_clk_wrapper.u_cpupll1_aks_dphypll_ns.clkout0 {{ PLL.CPUPLL1.clkout0 }}}
+clockFrequency -add {u_sigi_top.u_digital_top.{{ inst }}.u_cpu_pll_prediv_wrapper.u_cpu_ana_clk_wrapper.u_cpupll1_aks_dphypll_ns.pll_clkout_gp {{ PLL.CPUPLL1.gp }}}
+{% endif -%}
+{% endfor -%}
+{% endif %}
+
+# ------------------------------------------------------------------------------
+# 7. DDR0..DDR3 (DAT_CLK Source, Speed-Grade Frequency, PHY/DFI/PLL Assigns)
+# ------------------------------------------------------------------------------
+{% set ddr_src = "u_sigi_top.u_digital_top.u_ddr0_subsys_top_pwr_wrap.u_ddr_subsys_top_main_wrap.u_dwc_ddrphy_top_ew_wrapper_0.u_dwc_ddrphy_top.DAT_CLK" -%}
+clockSource -add {{ "{" }}{{ ddr_src }}{{ "}" }}
+{% if "PD_DDR6400" in ENV_MAP -%}
+clockFrequency -add {{ "{" }}{{ ddr_src }} 3200MHz{{ "}" }}
+{% endif -%}
+{% if "PD_DDR8533" in ENV_MAP -%}
+clockFrequency -add {{ "{" }}{{ ddr_src }} 4264MHz{{ "}" }}
+{% endif -%}
+{% if "PD_DDR3200" in ENV_MAP -%}
+clockFrequency -add {{ "{" }}{{ ddr_src }} 1600MHz{{ "}" }}
+{% endif -%}
+clockAssign -add {u_sigi_top.u_digital_top.u_ddr0_subsys_top_pwr_wrap.u_ddr_subsys_top_main_wrap.u_dwc_ddrphy_top_ew_wrapper_1.u_dwc_ddrphy_top.DAT_CLK {{ ddr_src }}}
+{% for ddr in range(1, 4) -%}
+{% for ew in range(2) -%}
+clockAssign -add {u_sigi_top.u_digital_top.u_ddr{{ ddr }}_subsys_top_pwr_wrap.u_ddr_subsys_top_main_wrap.u_dwc_ddrphy_top_ew_wrapper_{{ ew }}.u_dwc_ddrphy_top.DAT_CLK {{ ddr_src }}}
+{% endfor -%}
+{% endfor -%}
+{% set ratio2 = "RATIO_II" in ENV_MAP -%}
+{% set div_phy = 2 if ratio2 else 4 -%}
+{% set div_1066 = 2 if ratio2 else 4 -%}
+{% set div_533 = 4 if ratio2 else 8 -%}
+{% set div_2132 = "" if ratio2 else " 2" -%}
+{% for ddr in range(4) -%}
+{% for ew in range(2) -%}
+clockAssign -add {u_sigi_top.u_digital_top.u_ddr{{ ddr }}_subsys_top_pwr_wrap.u_ddr_subsys_top_main_wrap.u_dwc_ddrphy_top_ew_wrapper_{{ ew }}.u_dwc_ddrphy_top.PHY_CLK {{ ddr_src }} {{ div_phy }}}
+{% endfor -%}
+{% endfor -%}
+{% for ddr in range(4) -%}
+{% for ew in range(2) -%}
+clockAssign -add {u_sigi_top.u_digital_top.u_ddr{{ ddr }}_subsys_top_pwr_wrap.u_ddr_subsys_top_main_wrap.u_dwc_ddrphy_top_ew_wrapper_{{ ew }}.u_dwc_ddrphy_top.DFI_CLK {{ ddr_src }} {{ div_phy }}}
+{% endfor -%}
+{% endfor -%}
+{% for ddr in range(4) -%}
+clockAssign -add {u_sigi_top.u_digital_top.u_ddr{{ ddr }}_subsys_top_pwr_wrap.u_ddr_subsys_top_main_wrap.u_ddr_pll_prediv_wrapper.u_ddr_ana_clk_wrapper.clk_ddrpll_1066m_ddr {{ ddr_src }} {{ div_1066 }}}
+clockAssign -add {u_sigi_top.u_digital_top.u_ddr{{ ddr }}_subsys_top_pwr_wrap.u_ddr_subsys_top_main_wrap.u_ddr_pll_prediv_wrapper.u_ddr_ana_clk_wrapper.clk_ddrpll_533m_ddr {{ ddr_src }} {{ div_533 }}}
+clockAssign -add {u_sigi_top.u_digital_top.u_ddr{{ ddr }}_subsys_top_pwr_wrap.u_ddr_subsys_top_main_wrap.u_ddr_pll_prediv_wrapper.u_ddr_ana_clk_wrapper.clk_ddrpll_2132m_ddr {{ ddr_src }}{{ div_2132 }}}
+{% endfor -%}
+{% set emmc_del = ENV_MAP.get("PD_EMMC_DELAY", "4000") -%}
+{% if "PD_EMMC1" in ENV_MAP %}
+
+# ------------------------------------------------------------------------------
+# 8a. eMMC1 DLL Delay Cells
+# ------------------------------------------------------------------------------
+{% set phy1 = "u_sigi_top.u_digital_top.u_media_top.u_peri_subsys_top_pwr_wrap.u_peri_subsys_top_wrap.u_peri_subsys_top.u_emmc_host_chip_wrap_1.u_aks_emmc_sd_phy_ns.U_AKS_EMMC_SD_DL_TOP" -%}
+{% set dll1 = phy1 ~ ".U_DL_GROUP_TXCLK.U_DLMST.U_DL_FIXED.u_delay_cell_0.dll_clk" -%}
+clockSource -add {{ "{" }}{{ dll1 }}{{ "}" }}
+clockFrequency -add {{ "{" }}{{ dll1 }} {{ emmc_del }}{{ "}" }}
+{% for i in range(128) -%}
+{% for grp in ["U_DL_GROUP_TXCLK", "U_DL_GROUP_RXCLK", "U_DL_GROUP_DSTB"] -%}
+{% for side in ["U_DLMST", "U_DLSLV"] -%}
+{% if not (i == 0 and grp == "U_DL_GROUP_TXCLK" and side == "U_DLMST") -%}
+clockAssign -add {{ "{" }}{{ phy1 }}.{{ grp }}.{{ side }}.U_DL_FIXED.u_delay_cell_{{ i }}.dll_clk {{ dll1 }}{{ "}" }}
+{% endif -%}
+clockAssign -add {{ "{" }}{{ phy1 }}.{{ grp }}.{{ side }}.U_DL_FLEXIBLE.u_delay_cell_{{ i }}.dll_clk {{ dll1 }}{{ "}" }}
+{% endfor -%}
+{% endfor -%}
+{% endfor -%}
+{% endif -%}
+{% if "PD_EMMC0" in ENV_MAP %}
+
+# ------------------------------------------------------------------------------
+# 8b. eMMC0 DLL Delay Lines
+# ------------------------------------------------------------------------------
+{% set phy0 = "u_sigi_top.u_digital_top.u_media_top.u_peri_subsys_top_pwr_wrap.u_peri_subsys_top_wrap.u_peri_subsys_top.u_emmc_host_chip_wrap_0.u_sd_host_chip.u_s0_sd_emmc_dll_phy.dll" -%}
+{% set dll0 = phy0 ~ ".dll_delay_line_clk_sdclk.delay_0.d2_0.clk" -%}
+clockSource -add {{ "{" }}{{ dll0 }}{{ "}" }}
+clockFrequency -add {{ "{" }}{{ dll0 }} {{ emmc_del }}{{ "}" }}
+{% for i in range(128) -%}
+{% for line in ["dll_delay_line_clk_sdclk", "dll_delay_line_clk_sdmclk", "dll_delay_line_dat_strb", "dll_delay_line_master"] -%}
+{% for tap in ["d2_0", "d4_0", "p0", "r1", "r2"] -%}
+{% if not (i == 0 and line == "dll_delay_line_clk_sdclk" and tap == "d2_0") -%}
+clockAssign -add {{ "{" }}{{ phy0 }}.{{ line }}.delay_{{ i }}.{{ tap }}.clk {{ dll0 }}{{ "}" }}
+{% endif -%}
+{% endfor -%}
+{% endfor -%}
+{% endfor -%}
+{% for i in range(1, 9) -%}
+{% for tap in ["d2_0", "d4_0", "p0", "r1", "r2"] -%}
+clockAssign -add {{ "{" }}{{ phy0 }}.dll_phase_detect.dll_delay_element{{ i }}.{{ tap }}.clk {{ dll0 }}{{ "}" }}
+{% endfor -%}
+{% endfor -%}
+{% endif %}
+
+# ------------------------------------------------------------------------------
+# 9. EMAC
+# ------------------------------------------------------------------------------
+clockSource -add {EMAC_RX_CLK}
+clockFrequency -add {EMAC_RX_CLK 25MHz}
+{% if "eth_10g" in SPEEDBRIDGES %}
+
+# ------------------------------------------------------------------------------
+# 10. SpeedBridge & Target-Specific Clocks
+# ------------------------------------------------------------------------------
+# 10G Ethernet (HDESB) SpeedBridge clocks
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcs_phy_x4.u_eth_phy_x4_wrap.u_aks_mp32_phy_x4_ns.o_ln0_pll_w_clk 1031.25M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcs_phy_x4.u_eth_phy_x4_wrap.u_aks_mp32_phy_x4_ns.o_ln1_pll_w_clk 515.625M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcs_phy_x4.u_eth_phy_x4_wrap.u_aks_mp32_phy_x4_ns.o_ln2_pll_w_clk 257.8125M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcs_phy_x4.u_eth_phy_x4_wrap.u_aks_mp32_phy_x4_ns.o_ln3_pll_w_clk 250M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcs_phy_x4.u_eth_phy_x4_wrap.u_aks_mp32_phy_x4_ns.o_rx0_clk 515.625M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcs_phy_x4.u_eth_phy_x4_wrap.u_aks_mp32_phy_x4_ns.o_rx1_clk 257.8125M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcs_phy_x4.u_eth_phy_x4_wrap.u_aks_mp32_phy_x4_ns.o_rx2_clk 128.90625M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcs_phy_x4.u_eth_phy_x4_wrap.u_aks_mp32_phy_x4_ns.o_rx3_clk 125M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcsx4_wrapper.u_sgmii_xpcs3_wrap.u_DWC_sgmii_xpcs_wrap.clk_mii_rx_i 125M}
+clockFrequency -add {u_sigi_top.u_digital_top.u_media_bot.u_hsi_subsys_top_pwr_wrap.u_hsi_subsys_top_wrap.u_hsi_subsys_top.u_eth_top_pwr_wrap.u_eth_pcsx4_wrapper.u_sgmii_xpcs3_wrap.u_DWC_sgmii_xpcs_wrap.clk_mii_tx_i 125M}
+{% endif -%}
+{% if "usb_dev" in SPEEDBRIDGES %}
+
+# USB Device SpeedBridge clocks
+clockFrequency -add {clk_24m 24MHz}
+clockFrequency -add {clk_60m 60MHz}
+clockFrequency -add {clk_48m 48MHz}
+clockFrequency -add {clk_30m 30MHz}
+clockFrequency -add {clk_6m 6MHz}
+{% endif -%}
+{% if CFG_NAME == "db.octal_spi_flash" %}
+
+# Octal SPI Flash XSPI DLL clock
+clockFrequency -add {u_sigi_top.u_digital_top.u_mcu_subsys_top_pwr_wrap.u_mcu_subsys_top_wrap.u_mcu_subsys_top.u_mcu_xcu.u_mcu_xcu_peri_wrap.u_mcu_xcu_xspi.u_xspi.u_cdn_ip6182a_9fff_dll_phy.Inst_flash_databahn_dll_phy.dll_phy_slice_core.data_slice_0.dll_clk 4167MHz}
+{% endif -%}

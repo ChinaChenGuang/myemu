@@ -1,0 +1,73 @@
+# KEMU IXCOM (SA) 示例配置（日常单文件无需单独 netlist TOML，全程位于 <comdir>/database/<database.name>/）
+# 完整可选字段与高级覆写说明见 TOML_SPEC.md
+
+[database]
+name = 'base_ixcom'
+design_top = 'dut_top'
+testbench_top = 'tb_top'
+desc = 'min system IXCOM/SA database'
+
+[env]
+emu_root = '/proj/soc/emu'
+setup_scripts = ['$EMU_ROOT/env/setup_palladium.csh']
+bsub = false
+queues = ['verif_r8', 'design_r8']
+
+[env.vars]
+XE_SA_FAST_DOWNLOAD = '1'
+# DBE_HOST = 'dbengine_host' # 可选，通过官方 DBE_HOST 环境变量指定 DBEngine 主机
+
+[emulator]
+active = 'horizon_z2'
+target_system = 'Z2'
+
+[emulator.machines]
+horizon_z2 = { host = 'horizon_z2', et3confg = '/match3/scd.et3confg' }
+emu_z2 = { host = 'emu_z2', et3confg = 'match3/scd.et3confg.emu_z2' }
+
+[filelist]
+delete = [
+  'sim_only_model\.sv$',
+  '^\s*//',
+]
+replace = [
+  ['rtl/mem/sram_behav\.v', 'emu/mem/sram_emu.v'],
+  ['\+define\+SIM_ONLY', '+define+PALLADIUM'],
+]
+
+[analysis]
+define_list = ['PALLADIUM']
+vlog_opts = ['-timescale 1ns/1ps']
+
+[[analysis.module]]
+name = 'dut_top'
+worklib = 'dut_lib'
+verilog_filelist = ['$EMU_ROOT/rtl/flist/dut_verilog_flat.f']
+vhdl_filelist = ['$EMU_ROOT/rtl/flist/dut_vhdl_flat.f']
+
+[[analysis.module]]
+name = 'tb_top'
+worklib = 'tb_lib'
+verilog_filelist = ['$EMU_ROOT/tb/flist/tb_verilog_flat.f']
+
+[ixcom]
+compile_mode = 'multi'
+parallel_hdlice = 4
+dump_mode = 'online'
+
+[comp]
+boards = '0-5'
+
+[sim]
+tcl_file = '$EMU_ROOT/sim/run_sa.tcl'
+# run_cmd = 'run'           # 可选：留空则由 run_sa.tcl 或 Xcelium 交互控制
+# auto_exit = false
+
+[sim.wave]
+enable = false
+name = 'wave'
+
+[release]
+dest_dir = '$EMU_ROOT/release'
+include = ['xc_work', 'WORK', 'sim.csh']
+exclude = ['*.tmp', '*.bak']

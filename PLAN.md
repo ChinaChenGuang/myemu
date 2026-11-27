@@ -2,28 +2,33 @@
 
 ## 1. 项目定位与开发原则
 
-`kemu` 是基于 Python 的 Palladium（ICE）编译、仿真与发布脚本编排工具，核心链路为：
+`kemu` 是基于 Python 的 Palladium（ICE & IXCOM/SA）编译、仿真与发布脚本编排工具，严格遵循 Cadence WXE 24.05 官方手册语法，核心链路为：
 
 ```text
-CLI 参数 + database.toml -> Python 解析 & Filelist 预处理 -> Jinja2 渲染 xxx.sh / xxx.qel -> 执行（支持多线程 / 可选 LSF）
+CLI 参数 + database.toml -> Python 解析与严格环境校验 -> Jinja2 渲染 xxx.csh / xxx.qel -> 执行（支持多线程 / 可选 LSF）
 ```
 
+*(注：Filelist 清洗（`tools/emu_filelist_process`）、`computeFarm.json` 生成（`tools/emu_gen_computefarm`，`[env].bsub = true` 时）与 `clocks.qel` 生成（`tools/emu_gen_clocks`，解析 DE 时钟表格）均拆分为独立专属脚本工具，共用同一份 `database.toml` 配置，保持 `kemu` 本身简洁。)*
+
 **开发原则**：
-1. **避免过度开发**：不引入复杂框架、抽象工厂或多余设计模式，直接面向 Palladium 流程编写；配置保持单文件自包含。
-2. **简单易懂**：脚本和模板直观可读，工程师能直接看懂生成的 `.sh` / `.qel` 并方便微调。
-3. **命名贴合实际项目**：模块、函数和配置字段均使用 Palladium / Emulation 真实术语（`ice`、`analysis`、`elaborate`、`syn`、`impt`、`precomp`、`comp`、`sim`、`release`、`comdir`、`simdir`、`session`）。
+1. **避免过度开发**：不引入复杂框架、抽象工厂或多余设计模式，直接面向 Palladium ICE & IXCOM 流程编写；配置保持单文件自包含。
+2. **简单易懂**：脚本和模板直观可读，工程师能直接看懂生成的 `.csh` / `.qel` 并方便微调。
+3. **官方手册强对齐**：所有命令行选项、QEL/XEL 语句与 `computeFarm.json` 结构均以 `/home/chen/proj/Cadence/wxe_doc/` 官方 WXE 24.05 手册为唯一准绳。
 
 ---
 
 ## 2. 技术选型与运行约束
 
-- **Python 版本**：Python 3.11+（使用标准库 `tomllib` 解析 TOML，使用 `concurrent.futures.ThreadPoolExecutor` 实现多线程调度，使用 `argparse` 解析命令行）。
+- **Python 版本**：Python 3.11+（标准库 `tomllib`、`concurrent.futures.ThreadPoolExecutor`、`argparse`）。
 - **外部依赖**：仅 `jinja2`。
-- **内置默认工具命令**：`vavlog`（analysis）、`vaelab`（elaborate）、`xeCompile`（impt/precomp/comp）、`xeDebug`（sim），均可在 `database.toml` 中按需覆盖。
+- **内置默认工具命令**（版本通过 `[env].setup_scripts` 控制，不在 `database.toml` 冗余覆盖）：
+  - ICE：`vavlog` / `vavhdl`（analysis）、`vaelab`（elaborate）、`xeCompile`（impt/precomp/comp）、`xeDebug`（sim）。
+  - IXCOM（SA）：`vlan` / `vhan`（analysis）、`ixcom`（compile）、`xrun`（sim）。
+- **严格环境隔离**：编译与仿真阶段不使用外部 shell 环境变量，路径锚点 `EMU_ROOT` 来自 `[env].emu_root`，其余官方/自定义变量来自 `[env.vars]`；生成的脚本采用 `tcsh`/`csh`（`#!/usr/bin/env tcsh`），开头先按序 `setenv`（`EMU_ROOT` 最先设置，若含 `XE_HOST_FILE` 则先 `unsetenv XE_HOST`）再 `source [env].setup_scripts`，并通过 `$status` 传递退出码。
 - **执行模式**：
-  - 默认生成 `xxx.sh`（及必要的 `.qel`、处理后的 filelist）并立即执行。
-  - 提供 `--gen-only` 选项：仅渲染脚本与 filelist，不实际执行，便于检查或手动提交。
-- **调度方式**：默认本地 `bash xxx.sh` 执行；支持在 `database.toml` 中全局或按阶段配置集群提交前缀（如 `bsub ...`）。
+  - 默认生成 `xxx.csh`（及必要的 `.qel`、`va.lib` / `libmaprc`）并立即通过 `tcsh` 执行。
+  - 提供 `--gen-only` 选项：仅渲染脚本，不实际执行，便于检查或手动提交。
+- **调度方式**：由 `[env].bsub`（`true`/`false`）与 `[env].queues`、`[env].bsub_opts`、`[env.farm]` 统一控制；`bsub = true` 时，前端与仿真走 `bsub` 提交，`xeCompile` 阶段则使用由 `tools/emu_gen_computefarm` 生成的 `computeFarm.json` 接入集群。
 
 ---
 
@@ -31,31 +36,69 @@ CLI 参数 + database.toml -> Python 解析 & Filelist 预处理 -> Jinja2 渲�
 
 ```text
 KEMU/
-├── kemu                     # 可执行入口脚本（chmod +x，可直接 ./kemu 或加入 PATH）
-├── pyproject.toml           # 精简项目配置（Python >= 3.11, 仅依赖 jinja2, console_scripts = kemu）
-├── kemu_src/                # 核心代码（扁平结构）
+├── kemu                        # 可执行入口脚本（chmod +x，可直接 ./kemu 或加入 PATH）
+├── pyproject.toml              # 精简项目配置（Python >= 3.11, 仅依赖 jinja2, console_scripts = kemu）
+├── GEMINI.md                   # 工作区强约束规则（WXE 24.05 官方手册核验 + tcsh/隔离约定）
+├── kemu_src/                   # 核心代码（扁平结构）
 │   ├── __init__.py
-│   ├── cli.py               # 命令行入口与参数解析（help / build / sim / release）
-│   ├── db_config.py         # 读取与校验 database.toml，解析 $EMU_ROOT 路径
-│   ├── filelist.py          # Filelist 预处理（先 delete 后 replace，输出到编译目录）
-│   ├── render.py            # Jinja2 模板加载与渲染，生成可执行 xxx.sh / xxx.qel
-│   ├── runner.py            # 脚本执行与日志落盘，支持多线程并发（analysis 阶段）与可选 bsub 前缀
-│   ├── build_ice.py         # build ice：analysis / elaborate / syn / impt / precomp / comp
-│   ├── sim_ice.py           # sim ice：仿真脚本生成、session 绑定与日志归集
-│   └── release.py           # release：tar 打包与 DB 时间戳目录发布
-├── templates/               # Jinja2 脚本模板
-│   ├── ice_analysis.sh.j2   # analysis 脚本模板（默认 vavlog）
-│   ├── ice_elaborate.sh.j2  # elaborate 脚本模板（默认 vaelab）
-│   ├── ice_impt.sh.j2       # impt 启动脚本（默认 xeCompile import.qel）
-│   ├── import.qel.j2        # import.qel 模板
-│   ├── ice_precomp.sh.j2    # precomp 启动脚本（默认 xeCompile precompile.qel）
-│   ├── precompile.qel.j2    # precompile.qel 模板
-│   ├── ice_comp.sh.j2       # comp 启动脚本（默认 xeCompile compile.qel）
-│   ├── compile.qel.j2       # compile.qel 模板（支持根据 precomp 结果调整参数）
-│   └── ice_sim.sh.j2        # sim ice 启动脚本（默认 xeDebug）
+│   ├── cli.py                  # 命令行入口与参数解析（help / build / sim / release）
+│   ├── db_config.py            # 读取与严格校验 database.toml，基于 [env].emu_root 与 [env.vars] 解析路径
+│   ├── render.py               # Jinja2 模板加载与渲染，生成可执行 xxx.csh / xxx.qel
+│   ├── runner.py               # 脚本执行与日志落盘，支持多线程并发与 bsub 提交
+│   ├── build_ice.py            # build ice：analysis / elaborate / syn / impt / precomp / comp
+│   ├── build_ixcom.py          # build ixcom：analysis / swmodel / hdlice / xecompile / all
+│   ├── sim_ice.py              # sim ice：xeDebug 启动脚本与 run.tcl 生成
+│   ├── sim_ixcom.py            # sim ixcom：xrun -R 启动脚本与 run.tcl 生成
+│   └── release.py              # release：tar 打包与 DB 时间戳目录发布
+├── templates/                  # Jinja2 模板（严格对齐 WXE 24.05）
+│   ├── shared/
+│   │   ├── _env_header.csh.j2  # 公共 tcsh 环境头部模板（setenv / source / cd）
+│   │   ├── _symmetric_config.qel.j2 # 共享 symmetricConfiguration 模板
+│   │   ├── clocks.qel.j2       # 共享时钟 QEL 模板（tools/emu_gen_clocks 输出）
+│   │   └── trigger.tdf.j2      # 共享 SDL 触发定义模板（[sim.tdf] -> trigger.tdf）
+│   ├── ice/
+│   │   ├── va.lib.j2           # ICE 库映射文件模板
+│   │   ├── analysis_vlog.csh.j2
+│   │   ├── analysis_vhdl.csh.j2
+│   │   ├── elaborate.csh.j2
+│   │   ├── impt.csh.j2
+│   │   ├── import.qel.j2
+│   │   ├── precomp.csh.j2
+│   │   ├── compilerOptions.qel.j2
+│   │   ├── precompileOptions.qel.j2
+│   │   ├── keepNets.qel.j2
+│   │   ├── precompile.qel.j2
+│   │   ├── comp.csh.j2
+│   │   ├── compile.qel.j2
+│   │   ├── sim.csh.j2
+│   │   ├── run.tcl.j2
+│   │   ├── gen_fsdb_offline.tcl.j2
+│   │   └── sb/                 # SpeedBridge 子模板
+│   └── ixcom/
+│       ├── libmaprc.j2         # IXCOM 库映射文件模板
+│       ├── analysis_vlan.csh.j2
+│       ├── analysis_vhan.csh.j2
+│       ├── gen_clk.csh.j2
+│       ├── ixcom_build.csh.j2  # 单步编译模板
+│       ├── ixcom_swmodel.csh.j2
+│       ├── ixcom_hdlice.csh.j2
+│       ├── ixcom_xecompile.csh.j2
+│       ├── ixcom_multi.csh.j2  # 多步流水模板
+│       ├── import.qel.j2
+│       ├── compile.qel.j2
+│       ├── sim.csh.j2
+│       └── run.tcl.j2
+├── tools/                      # 解耦的独立专属脚本工具（共用 database.toml）
+│   ├── prep_flists.csh.j2      # Filelist 清洗脚本模板
+│   ├── emu_filelist_process    # 独立 filelist 清洗脚本
+│   ├── emu_gen_computefarm     # 独立 computeFarm.json 生成脚本
+│   └── emu_gen_clocks          # 解析 DE 时钟表格生成 clocks.qel
 ├── examples/
-│   └── database.toml        # 完整示例配置（含中文注释，遵循 TOML_SPEC.md）
-└── tests/                   # 单元测试（不依赖真实 Palladium 环境即可运行）
+│   ├── ice_database.toml       # ICE 单文件一站式示例配置（遵循 TOML_SPEC.md）
+│   ├── ice_netlist.toml        # ICE 双文件解耦前端 Netlist 示例
+│   ├── ice_db_fv.toml          # ICE 双文件解耦后端 Database 示例
+│   └── ixcom_database.toml     # IXCOM (SA) 日常单文件示例配置（遵循 TOML_SPEC.md）
+└── tests/                      # 单元测试（不依赖真实 Palladium 环境即可运行）
 ```
 
 ---
@@ -66,34 +109,32 @@ KEMU/
 - 输出各子命令（`build` / `sim` / `release`）的用法说明与典型使用示例。
 
 ### 4.2 `kemu build`
-- `kemu build ice --db <database.toml> --comdir <path> --act <action> [--gen-only]`
-  - **工作目录**：`$EMU_ROOT/<path>/database/`（若目录不存在则自动创建；若未设置 `$EMU_ROOT` 给出清晰报错）。
-  - **所有生成的处理后 filelist、脚本、`.qel`、log 与 database 文件均落在该工作目录下执行与保存**。
+- `kemu build ice -db <db_name> --comdir <path> --act <action> [--gen-only]`
+  - **`-db` 解析规则**（同时兼容 `--db`）：传入 `<db_name>` 时无需加 `.toml` 后缀，工具自动补全 `.toml`（若已显式传入 `*.toml` 亦可直接识别）。
+  - **统一 `--comdir` 与前后端目录解耦**：`--comdir` 绝对路径直接使用 `<path>`，相对路径以 `[env].emu_root` 为基准拼为 `$EMU_ROOT/<path>`（不引入 `--netlist-dir`）：
+    - **前端目录 `<comdir>/netlist/<netlist.name>/`**：`analysis`、`elaborate`、`syn` 的工作目录（产出 `va.lib`、`*.vg` 及产物清单 `netlist_manifest.toml`）。
+    - **后端目录 `<comdir>/database/<database.name>/`**：`impt`、`precomp`、`comp` 的工作目录（按 `[database].netlist` 定位 `<comdir>/netlist/<netlist>/netlist_manifest.toml` 直接引用 `.vg`，不拷贝网表；单文件同时写 `[netlist]` 与 `[database]` 时自动继承 `[netlist].name`）。
   - **`--act` 支持的动作**：
-    - `analysis`：
-      - 对原始（已展平）filelist 执行 `filelist_delete`（先删）+ `filelist_replace`（后替），输出到当前编译目录。
-      - 若未配置 `[[analysis.jobs]]`，使用 `[database].verilog_filelist` 跑单个默认 `vavlog` 任务；
-      - 若配置了 `[[analysis.jobs]]`，使用 Python 多线程并发执行各 subsys 的 `vavlog` 任务（每个 job 支持各自的处理规则）。
-    - `elaborate`：渲染并执行 `vaelab` 脚本，完成网表创建。
-    - `syn`：顺序执行 `analysis` -> `elaborate`（任一步失败即中止）。
-    - `impt`：渲染 `import.qel` 与 `impt.sh`，执行 `xeCompile import.qel`。
-    - `precomp`：渲染 `precompile.qel` 与 `precomp.sh`，执行 `xeCompile precompile.qel`。
-    - `comp`：渲染 `compile.qel` 与 `comp.sh`，支持 `[comp.params]` + `qel_lines` 灵活调整参数，执行最终 database 编译。
-- `kemu build ixcom ...`
-  - 明确输出提示：`ixcom 暂不支持` 并返回非零退出码。
+    - `analysis`：生成 `va.lib`，按 `[[analysis.module]]` 并发生成并执行 `analysis_<name>_vlog.csh`（`vavlog -logFile ...`）与 `analysis_<name>_vhdl.csh`（`vavhdl -logFile ... -file ...`）。
+    - `elaborate`：并发渲染并执行 `design_top` 与 `testbench_top` 两路 `vaelab <top> -logFile ... -outputVlog ...` 脚本，并写出 `netlist_manifest.toml`。
+    - `syn`：顺序执行 `analysis` -> `elaborate`。
+    - `impt`：读取 `netlist_manifest.toml`（或 `[impt].netlist_files`），渲染 `import.qel` 与 `impt.csh`，执行 `xeCompile [-z2|-z3] -log impt.log import.qel`（`bsub = true` 时 `designImport -useLSF` 并依赖 `computeFarm.json`）。
+    - `precomp`：结合 `[comp].compiler_options`/`flow`（确保 `compilerOptions.qel` 在 `precompile` 之前执行）与 `[precomp]`（`precompileOptions.qel`、`keepNets.qel`、可选 `clocks_qel`、`moduleStub`/`instanceStub` DB 裁剪）渲染 `precompile.qel` 与 `precomp.csh`，执行预编译检查。
+    - `comp`：按 `flow`（`unified` / `ppc`）与 `[emulator]`/`[comp]` 渲染 `compilerOptions.qel`、`compile.qel`（含 `target_compile_scripts`、`icePrepare`）与 `comp.csh`，执行最终编译。
+- `kemu build ixcom -db <db_name> --comdir <path> [--act <analysis|swmodel|hdlice|xecompile|all>] [--gen-only]`
+  - IXCOM 日常采用单文件配置（不写 `[netlist]`），全程直接在 `<comdir>/database/<database.name>/` 生成 `libmaprc`、按 `[ixcom].compile_mode`（`multi` / `single`）渲染并执行 `vlan`/`vhan` 与 `ixcom` 分阶段或单步脚本。（若显式配置 `[netlist]` + `[database].netlist`，则 `analysis` 落在 `<comdir>/netlist/<netlist.name>/`，后端通过 `-libmaprc` 复用。）
 
 ### 4.3 `kemu sim`
-- `kemu sim ice --db <database.toml> --simdir <path> --session <session_name> [--gen-only]`
-  - `--simdir`：仿真日志归集目录（不存在则自动创建）。
-  - `--session`：指定 Palladium 仿真 session 名称，传入模板渲染到 `sim.sh`。
-- `kemu sim ixcom ...`
-  - 明确输出提示：`ixcom 暂不支持` 并返回非零退出码。
+- `kemu sim ice   -db <db_name> --db-path <path> --simdir <path> --session <session_name> [--gen-only]`
+  - 按 `[sim]` / `[sim.wave]` / `[sim.tdf]` 与 `[emulator]` 激活机器渲染 `trigger.tdf`（可选，`[sim.wave].enable = true` 时自动插入 `sdl -setFile/-load/-enable`）、`run.tcl`（`debug <db_path> -session <session>` -> `host <emu_host> -path [pwd]` -> `download` -> 可选 `configPM` / `target_run_scripts` / `[sim.wave]` + `[sim.tdf]` / `tcl_file` / `run_cmd` / 收尾）与 `sim.csh`（`xeDebug -host ... -session ... -log sim.log -init run.tcl`）。
+- `kemu sim ixcom -db <db_name> --db-path <path> --simdir <path> --session <session_name> [--gen-only]`
+  - 使用同一套 `[sim]` / `[sim.wave]` / `[sim.tdf]` 上下文渲染 `trigger.tdf`、`run.tcl` 与 `sim.csh`（由 `[emulator]` 激活机器注入 `XE_HOST` / `XE_HOST_FILE`，可选 `DBE_HOST` 由 `[env.vars]` 配置，并执行 `xrun -R -xmlibdirname <db_path> -input run.tcl`）。
 
 ### 4.4 `kemu release`
-- `kemu release --db <database.toml> --comdir <path> --type <tar|DB>`
-  - 根据 `[release]` 配置的必要目录/文件/脚本清单，从 `$EMU_ROOT/<comdir>/database/` 收集目标内容。
+- `kemu release -db <db_name> --comdir <path> --type <tar|DB>`
+  - 从 `<comdir>/database/<database.name>/` 收集 `[release].include`：
   - `--type tar`：打包为 `<dest_dir>/<db_prefix>_<name>_<yymmddhhmm>.tar.gz`。
-  - `--type DB`：拷贝到单层时间戳目录 `<dest_dir>/<db_prefix>_<name>_<yymmddhhmm>/`（如 `database_min_system_2607111221/`）。
+  - `--type DB`：拷贝到单层时间戳目录 `<dest_dir>/<db_prefix>_<name>_<yymmddhhmm>/`。
 
 ---
 
@@ -101,11 +142,23 @@ KEMU/
 
 | 阶段 | 任务 | 验证方式 |
 |---|---|---|
-| **M1** | 搭建项目骨架、`cli.py`（`help` / `build` / `sim` / `release` + `ixcom` 拦截）与 `db_config.py` | 运行 `kemu help`、测试 `TOML_SPEC.md` 配置解析与按需校验 |
-| **M2** | 实现 `filelist.py`（先 delete 后 replace 落地编译目录）、`render.py`（Jinja2 渲染）与 `runner.py`（执行、LSF 覆盖、日志落盘、多线程调度） | 单元测试 filelist 预处理、并发执行、失败捕获与 `--gen-only` 模式 |
-| **M3** | 实现 `build_ice.py` 与 `analysis/elaborate/syn/impt/precomp/comp` 模板 | 在临时 `$EMU_ROOT` 下跑通全部 6 个 `--act` 动作（含单 filelist 与多 job 两种 analysis 模式） |
-| **M4** | 实现 `sim_ice.py` 与 `ice_sim.sh.j2` 模板 | 验证 `--simdir` 日志归集、`--session` 注入与脚本生成 |
+| **M1** | 搭建项目骨架、`cli.py`（`help` / `build` / `sim` / `release`，支持 `-db <db_name>` 自动补齐 `.toml`）与 `db_config.py`（严格字段校验、`[netlist]`/`[database]` 按需校验、`[emulator]` 机器池与 `[env.vars]` 隔离解析） | 运行 `kemu help`、测试 `TOML_SPEC.md` 全部校验规则 |
+| **M2** | 实现 `render.py`（Jinja2 渲染、`StrictUndefined`）与 `runner.py`（`tcsh` 执行、`bsub` 拼接、日志落盘、多线程调度） | 单元测试并发执行、LSF 命令拼接、失败捕获与 `--gen-only` 模式 |
+| **M3** | 实现 `build_ice.py` 与 `build_ixcom.py`（ICE 前后端 `<comdir>/netlist/<name>/` 与 `<comdir>/database/<name>/` 解耦 + `netlist_manifest.toml` 交接，IXCOM 单文件与可选复用流程） | 在临时 `EMU_ROOT` 下验证 ICE 6 个 `--act`（含 1 对 N 解耦）与 IXCOM 单步/多步渲染执行 |
+| **M4** | 实现 `sim_ice.py` 与 `sim_ixcom.py`（`--db-path`/`--simdir`/`--session`、`[emulator]`/`DBE_HOST` 注入与 `[sim]`/`[sim.wave]`/`[sim.tdf]` 统一渲染） | 验证多编译目录切换仿真、日志归集与 `trigger.tdf` / `run.tcl` 生成 |
 | **M5** | 实现 `release.py`（`tar` 与 `DB` 单层时间戳目录） | 验证 tar 包内容完整性、DB 目录命名与缺失文件校验 |
-| **M6** | 编写完整单元测试 `tests/`、示例 `examples/database.toml` 与精简 `README.md` | 运行 `pytest` / `unittest` 全量通过 |
+| **M6** | 编写完整单元测试 `tests/`、维护 4 份 `examples/` 示例配置与精简 `README.md` | 运行 `pytest` / `unittest` 全量通过 |
+| **M7** | 实现 `tools/` 下的三个独立专属脚本工具（`tools/emu_filelist_process`、`tools/emu_gen_computefarm`、`tools/emu_gen_clocks`）及单元测试 | 在临时 `EMU_ROOT` 下验证 filelist 清洗、`computeFarm.json` 及 `clocks.qel` 生成结果 |
+
+---
+
+## 6. 后续实现阶段待迭代项
+
+1. **`trigger.tdf` 模板与 `[sim.tdf]` 配置精简（关联 M4）**
+   - 当前 `[sim.tdf]` 与 [trigger.tdf.j2](file:///home/chen/proj/KEMU/templates/shared/trigger.tdf.j2) 引入了较多高级选项（`enable1`/`enable2`、`counter1`/`counter2`、`aliases`、`acquire`/`no_acquire` 等），存在过度设计风险。
+   - 后续在 **M4（`sim_ice.py` / `sim_ixcom.py`）** 实现时，对照 `SDL.pdf` P217–P218 官方语法（如 `scope <scope>;`、`Instance <inst>;`、`State <state> { if (<expr>) { <TRIGGER_NAME>: trigger; } }`），按最常用触发场景进一步精简模板结构与 TOML 字段。
+2. **模板上下文变量命名规范统一（关联 M2 / M3 / M4）**
+   - 当前 `templates/` 下尚未与 Python 渲染代码联调，模板间上下文命名尚不统一（如部分模板使用扁平字段 `db_name`/`emu_host`/`et3confg`，部分使用嵌套对象 `cfg.file`/`wave.xxx`/`tdf.xxx`，以及 `templates/ice/sb/*.j2` 历史变量残留）。
+   - 在 **M2（`render.py`）**、**M3（`build_*.py`）** 与 **M4（`sim_*.py`）** 编码实现过程中，同步制定统一的 Jinja2 上下文命名契约并逐个审计重构所有 `.j2` 模板，确保全量模板在 `StrictUndefined` 单元测试下命名一致、零残留。
 
 *(详细 TOML 配置规范见 [TOML_SPEC.md](./TOML_SPEC.md))*

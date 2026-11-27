@@ -1,0 +1,72 @@
+{## =========================================================================== ##}
+{## Stage: IXCOM SIM — Xcelium SA Simulation Run Script (xrun -input)           ##}
+{## Reference: DebuggingDesigns.pdf P14, xecmdref.pdf P606/P812-P813, WXE 24.05 ##}
+{## =========================================================================== ##}
+# Auto-generated IXCOM (SA) simulation script for {{ db_name }}
+
+{% for script in target_run_scripts %}
+if { [file exists "{{ script }}"] } {
+    source "{{ script }}"
+} else {
+    puts "ERROR: Target run script not found: {{ script }}"
+    exit 1
+}
+{% endfor %}
+{% if wave.enable %}
+
+# Configure waveform database ({{ wave.name }})
+database -open {{ wave.name }} -into {{ wave.name }}.shm -default
+{% for script in wave.probe_scripts %}
+if { [file exists "{{ script }}"] } {
+    source "{{ script }}"
+} else {
+    puts "ERROR: Probe script not found: {{ script }}"
+    exit 1
+}
+{% endfor %}
+{% for line in wave.probes %}
+{{ line }}
+{% endfor %}
+{% if tdf_path %}
+
+# Load & enable SDL trigger definition (.tdf, xecmdref.pdf P833/P839/P842/P849/P859)
+if { [file exists "{{ tdf_path }}"] } {
+{% if tdf.auto_probe %}
+    sdl -auto on
+{% endif %}
+{% if tdf.halt_on_trigger %}
+    sdl -haltOnTrigger 1
+{% endif %}
+    sdl -setFile "{{ tdf_path }}"
+    sdl -load
+    sdl -enable
+} else {
+    puts "ERROR: SDL trigger file not found: {{ tdf_path }}"
+    exit 1
+}
+{% endif %}
+{% endif %}
+{% if tcl_file %}
+
+# Source user simulation Tcl script
+if { [file exists "{{ tcl_file }}"] } {
+    source "{{ tcl_file }}"
+} else {
+    puts "ERROR: Simulation script not found: {{ tcl_file }}"
+    exit 1
+}
+{% endif %}
+{% for line in user_command_pre_run %}
+{{ line }}
+{% endfor %}
+{% if run_cmd %}
+
+# Execute run command
+{{ run_cmd }}
+{% endif %}
+{% for line in user_command_post_run %}
+{{ line }}
+{% endfor %}
+{% if auto_exit %}
+exit
+{% endif %}

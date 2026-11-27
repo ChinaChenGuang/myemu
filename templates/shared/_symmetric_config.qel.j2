@@ -1,0 +1,21 @@
+{## =========================================================================== ##}
+{## Shared Symmetric Compile Configuration (symmetricConfiguration)             ##}
+{## Reference: xecmdref.pdf P459-P461, emulator.pdf P23-P29, WXE 24.05          ##}
+{## =========================================================================== ##}
+{%- if symmetric_configs %}
+symmetricConfiguration -clear
+{% for cfg in symmetric_configs %}
+{%- set target = '{file ' ~ cfg.file ~ '}' if cfg.file else '{host ' ~ cfg.host ~ '}' %}
+{%- if cfg.boards %}
+symmetricConfiguration -add {{ target }}{% for b in cfg.boards %} {boards {{ b }}}{% endfor %}
+{% if cfg.advanced_placements %}
+symmetricConfiguration -add {{ target }} {advancedPlacements {{ cfg.advanced_placements }}}
+{% endif %}
+{%- elif not cfg.locations %}
+symmetricConfiguration -add {{ target }}
+{% endif %}
+{%- if cfg.locations %}
+symmetricConfiguration -add {{ target }}{% for loc in cfg.locations %} {location {{ loc }}}{% endfor %}
+{% endif %}
+{%- endfor %}
+{%- endif %}

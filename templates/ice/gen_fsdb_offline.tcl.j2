@@ -1,0 +1,32 @@
+{## =========================================================================== ##}
+{## Stage: ICE Offline Waveform Extraction (xeDebug -offline)                  ##}
+{## Reference: DebuggingDesigns.pdf P27-P28, xecmdref.pdf P202/P605-P614/P686/P911 ##}
+{## =========================================================================== ##}
+# Auto-generated Palladium ICE offline waveform extraction script for {{ db_name }}
+
+debug {{ db_path }} -session {{ session }}
+host -offline {{ wave.name }}.phy
+database {{ wave.name }} -batch{% if wave.num_files %} -numFiles {{ wave.num_files }}{% endif %}
+
+{% if wave.time_unit %}
+xeset timeUnit {{ wave.time_unit }}
+{% endif %}
+{% if wave.trigger_pos is not none and wave.trigger_pos != '' %}
+xeset triggerPos {{ wave.trigger_pos }}
+{% endif %}
+{% if wave.trace_mem_size %}
+xeset traceMemSize {{ wave.trace_mem_size }}
+{% endif %}
+{% for script in wave.probe_scripts %}
+if { [file exists "{{ script }}"] } {
+    source "{{ script }}"
+} else {
+    puts "ERROR: Probe script not found: {{ script }}"
+    exit 1
+}
+{% endfor %}
+{% for line in wave.probes %}
+{{ line }}
+{% endfor %}
+database -upload
+exit

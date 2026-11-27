@@ -1,0 +1,25 @@
+{## Golden: Cadence pdapp2506 hdesb hdesb_comp.qel & run.tcl ##}
+{% macro compile(SB_DIR, EMU_HOST, ITEMS) %}
+source "{{ SB_DIR }}/keepnets.qel"
+source "{{ SB_DIR }}/global_HDESB_12x256bit_sdr_R1_1.qel"
+{% for item in ITEMS %}
+HDESB_add_TERMs_12x256bit_sdr {{ item.inst }}
+{% endfor %}
+source "{{ SB_DIR }}/type_HDESB_12x256bit_sdr_R1_1.qel"
+{% for item in ITEMS %}
+targetLocation -add loc_HDESB_{{ loop.index0 }} type_HDESB_12x256bit_sdr {{ EMU_HOST }} {{ item.loc_port }}
+HDESB_inst_to_loc_12x256bit_sdr {{ item.inst }} loc_HDESB_{{ loop.index0 }}
+{% endfor %}
+{% endmacro %}
+
+{% macro sim_relocate(EMU_HOST, ITEMS) %}
+{% for item in ITEMS %}
+targetLocation -add loc_HDESB_{{ loop.index0 }} type_HDESB_12x256bit_sdr {{ EMU_HOST }} {{ item.reloc_port }}
+targetAssign -add {{ item.inst_id }} loc_HDESB_{{ loop.index0 }}
+{% endfor %}
+{% endmacro %}
+
+{% macro sim_post_download(ITEMS) %}
+sdl -setFile hdesb_10g_pd.sdl
+sdl -enable
+{% endmacro %}

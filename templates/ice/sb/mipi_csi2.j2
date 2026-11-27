@@ -1,0 +1,19 @@
+{## Golden: Cadence pdapp2506 hdmipi_csi xecompile.qel ##}
+{% macro compile(SB_DIR, EMU_HOST, ITEMS) %}
+source "{{ SB_DIR }}/script/global_HDIO_nx96bit.qel"
+{% for item in ITEMS %}
+HDIO_add_TERMs_nx96bit {{ item.inst }}
+{% endfor %}
+source "{{ SB_DIR }}/script/type_HDIO_nx96bit.qel"
+{% for item in ITEMS %}
+targetLocation -add target_loc_HDIO_{{ loop.index0 }} type_HDIO_nx96bit {{ EMU_HOST }} {{ item.loc_port }}
+HDIO_inst_to_loc_nx96bit {{ item.inst }} target_loc_HDIO_{{ loop.index0 }}
+{% endfor %}
+{% endmacro %}
+
+{% macro sim_relocate(EMU_HOST, ITEMS) %}
+{% for item in ITEMS %}
+targetLocation -add target_loc_HDIO_{{ loop.index0 }} type_HDIO_nx96bit {{ EMU_HOST }} {{ item.reloc_port }}
+targetAssign -add {{ item.inst_id }} target_loc_HDIO_{{ loop.index0 }}
+{% endfor %}
+{% endmacro %}

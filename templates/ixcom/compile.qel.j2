@@ -1,0 +1,81 @@
+{## =========================================================================== ##}
+{## Stage: IXCOM COMP — Custom Hardware Compile QEL (optional)                  ##}
+{## Reference: compileIXCOM.pdf P49-P50/P306, emulator.pdf P15-P20, WXE 24.05   ##}
+{## Note: Official docs recommend compilerOptions.qel over overriding compile.qel ##}
+{## =========================================================================== ##}
+delimiterRule Verilog
+{% if include_import_block %}
+importOption {mode {{ import_mode | default('full') }}}
+refLib {{ ref_libs | default(['qtref', 'generic']) | join(' ') }}
+importOption {protection on}
+importOption {special DELETE_LIBS_ON_FULL} {V1995 ON} {IXCOM_RTL ON} {library hdldb}
+importOption {toplib hdldb} {topcell xcva_top}
+if { [file exists "importOptions.qel"] } {
+    source importOptions.qel
+}
+source xc_work/qel/ixcomImport.qel
+{% endif %}
+
+if {[file exists xc_work/qel/ixcPreDesignOptions.qel]} {
+    source xc_work/qel/ixcPreDesignOptions.qel
+}
+design hdldb xcva_top
+
+if {[file exists xc_work/qel/ixcOptions.qel]} {
+    source xc_work/qel/ixcOptions.qel
+}
+catch { probeInternalNet -add xc_top.sdlEnable xc_top.tbcEnable xc_top.sdlHaltHwClk xc_top.hwClkDbg xc_top.hwClkDbgTime xc_top.hwClkEnable }
+
+# Compiler options
+compilerOption -add {mode {{ mode | default('ice') }}}
+compilerOption -add {visionMode {{ vision_mode | default('FV') }}}
+compilerOption -add {ioDelayUnit uatif}
+compilerOption -add {allowStopHDTarget OFF}
+
+# Emulator configuration (file vs host mutually exclusive)
+{% if et3confg %}
+emulatorConfiguration -add {file {{ et3confg }}}{% if boards %} {boards {{ boards }}}{% endif %}
+
+{% elif emu_host %}
+emulatorConfiguration -add {host {{ emu_host }}}{% if boards %} {boards {{ boards }}}{% endif %}
+
+{% endif %}
+{% include 'shared/_symmetric_config.qel.j2' %}
+{% if keepnet_block %}
+{{ keepnet_block }}
+{% endif %}
+{% for script in target_compile_scripts %}
+if { [file exists "{{ script }}"] } {
+    source "{{ script }}"
+} else {
+    puts "ERROR: Compile script not found: {{ script }}"
+    exit 1
+}
+{% endfor %}
+
+{% for name, value in env_vars.items() %}
+set ::env({{ name }}) "{{ value }}"
+{% endfor %}
+
+# Pre-compilation checks
+if {[file exists xc_work/nl/hot-swap.qel]} { source xc_work/nl/hot-swap.qel }
+if {[file exists xc_work/qel/mdx.qel]} { source xc_work/qel/mdx.qel }
+if {[file exists xc_work/qel/compilerOptions.qel]} {
+    source xc_work/qel/compilerOptions.qel
+} elseif {[file exists compilerOptions.qel]} {
+    source compilerOptions.qel
+}
+{% for line in user_command_pre_precomp %}
+{{ line }}
+{% endfor %}
+precompile
+
+# Compile for Palladium
+{% for line in user_command_pre_comp %}
+{{ line }}
+{% endfor %}
+{{ compile_cmd | default('compile -names_crit') }}
+{% for line in user_command_post_comp %}
+{{ line }}
+{% endfor %}
+if {[file exists xc_work/qel/postCompile.qel]} { source xc_work/qel/postCompile.qel }

@@ -1,0 +1,21 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: ICE Simulation Run (xeDebug)                                         ##}
+{## Reference: xecmdref.pdf P202-P203, DebuggingDesigns.pdf P27-P31, WXE 24.05 ##}
+{## =========================================================================== ##}
+{{ cmd | default('xeDebug') }}{% if target_flag %} {{ target_flag }}{% endif %}{% if '-gui' not in opts and '-noecho' not in opts %} -noecho{% endif %} \
+{% if emu_host %}
+  -host {{ emu_host }} \
+{% endif %}
+  -session {{ session }} \
+  -log sim.log \
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+  -init {{ run_tcl | default('run.tcl') }}
+set rc = $status
+if ( $rc != 0 ) exit $rc
+{% for line in extra_lines %}
+{{ line }}
+if ( $status != 0 ) exit $status
+{% endfor %}

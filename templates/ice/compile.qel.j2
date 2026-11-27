@@ -1,0 +1,40 @@
+{## =========================================================================== ##}
+{## Stage: ICE COMP — Database Compilation (xeCompile)                          ##}
+{## Reference: compileICE.pdf P117-P118, emulator.pdf P15-P20/P117, xecmdref.pdf P316/P353/P545-P546 ##}
+{## =========================================================================== ##}
+# Auto-generated Palladium ICE compile script for {{ db_name }}
+
+delimiterRule Verilog
+design {{ design_lib }} {{ top_module }}
+# Must execute before precompile and icePrepare (xecmdref.pdf P316)
+source compilerOptions.qel
+
+{% if et3confg %}
+emulatorConfiguration -add {file {{ et3confg }}}{% if boards %} {boards {{ boards }}}{% endif %}
+
+{% elif emu_host %}
+emulatorConfiguration -add {host {{ emu_host }}}{% if boards %} {boards {{ boards }}}{% endif %}
+
+{% endif %}
+{% include 'shared/_symmetric_config.qel.j2' %}
+{% if flow == 'ppc' and use_lsf %}
+set PPC(computeFarm) "auto"
+{% endif %}
+{% for script in target_compile_scripts %}
+if { [file exists "{{ script }}"] } {
+    source "{{ script }}"
+} else {
+    puts "ERROR: Compile script not found: {{ script }}"
+    exit 1
+}
+{% endfor %}
+{% for line in user_command_pre_comp %}
+{{ line }}
+{% endfor %}
+{% if ice_prepare %}
+icePrepare
+{% endif %}
+{{ compile_cmd | default('compile') }}
+{% for line in user_command_post_comp %}
+{{ line }}
+{% endfor %}

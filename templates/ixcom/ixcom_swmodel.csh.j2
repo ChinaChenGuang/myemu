@@ -1,0 +1,35 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: IXCOM Multi-Step Stage 1 — Software Model (-target swmodel)          ##}
+{## Reference: compileIXCOM.pdf P209-P212, WXE 24.05                            ##}
+{## =========================================================================== ##}
+mkdir -p ./WORK
+if ( $status != 0 ) exit $status
+
+{{ cmd | default('ixcom') }} \
+  -target swmodel \
+  +sv -ua -libmaprc {{ libmaprc | default('libmaprc') }} \
+  +dut+{{ design_top }}{% if clk_module %}+{{ clk_module }}{% endif %} \
+  -top {{ testbench_top }} \
+{% if clk_module %}
+  -top {{ clk_module }} \
+  -timescale {{ clk_timescale }} \
+{% endif %}
+  {% if hw_mode %}+1xua {% endif %}+targetTop+{{ testbench_top }} -rtlNameForGenerate +tran_relax +tb_import_systf+stop \
+  +ignoreSimVerCheck -rtlchk warn \
+  -vaelabargs "{% if vaelab_opts %}{{ vaelab_opts | join(' ') }} {% endif %}{% if parallel_hdlice %}-parallel {{ parallel_hdlice }} {% endif %}-keepAllFlipFlop{% if clk_module %} -iscDelay={{ clk_module }}{% endif %}" \
+{% if dump_mode == 'offline' %}
+  -enableLWD \
+{% endif %}
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+  -l ixcom_swmodel.log
+set rc = $status
+if ( $rc != 0 ) exit $rc
+
+{% if dump_mode == 'offline' %}
+{{ cmd | default('ixcom') }} -target lwdmodel -l ixcom_lwd.log
+set rc = $status
+if ( $rc != 0 ) exit $rc
+{% endif %}

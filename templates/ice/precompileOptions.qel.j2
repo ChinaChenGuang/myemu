@@ -1,0 +1,13 @@
+{## =========================================================================== ##}
+{## Stage: ICE PRECOMP — precompileOptions.qel                                  ##}
+{## Reference: xecmdref.pdf "precompileOption" (P407-P408), WXE 24.05           ##}
+{## =========================================================================== ##}
+# Auto-generated Palladium ICE precompile options for {{ db_name }}
+
+{% for opt in precompile_options %}
+{% if ' ' in opt and not (opt.startswith('{') and opt.endswith('}')) %}
+precompileOption -add {{ '{' }}{{ opt }}{{ '}' }}
+{% else %}
+precompileOption -add {{ opt }}
+{% endif %}
+{% endfor %}

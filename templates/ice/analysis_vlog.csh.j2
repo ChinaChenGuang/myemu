@@ -1,0 +1,23 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: ICE Analysis — Verilog/SystemVerilog (vavlog)                        ##}
+{## Reference: compileICE.pdf "vavlog" (P55-P58), WXE 24.05                    ##}
+{## =========================================================================== ##}
+{{ cmd | default('vavlog') }} \
+  -logFile analysis_{{ module_name }}_vlog.log \
+  -db2 \
+  -sv \
+  -work {{ worklib }} \
+  -vaLib {{ valib | default('va.lib') }} \
+{% for macro in define_list | default([]) %}
+  +define+{{ macro }} \
+{% endfor %}
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+{% for fl in filelists %}
+  -f {{ fl }}{% if not loop.last %} \{% endif %}
+
+{% endfor %}
+set rc = $status
+if ( $rc != 0 ) exit $rc

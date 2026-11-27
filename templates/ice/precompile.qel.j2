@@ -1,0 +1,45 @@
+{## =========================================================================== ##}
+{## Stage: ICE PRECOMP — Design Setup & Precompile (xeCompile)                 ##}
+{## Reference: compileICE.pdf P94/P113, xecmdref.pdf P316/P353/P366/P393/P407/P546 ##}
+{## =========================================================================== ##}
+# Auto-generated Palladium ICE precompile script for {{ db_name }}
+
+# Step 0: Hierarchical name delimiter style
+delimiterRule Verilog
+
+# Step 1: Design selection
+design {{ design_lib }} {{ top_module }}
+
+# Step 2: ICE compiler, precompile & keepNet options
+# (compilerOption must execute before precompile & icePrepare, xecmdref.pdf P316)
+source compilerOptions.qel
+source precompileOptions.qel
+source keepNets.qel
+
+# Step 3: Clocks configuration (optional)
+{% if clocks_qel %}
+if { [file exists "{{ clocks_qel }}"] } {
+    source "{{ clocks_qel }}"
+} else {
+    puts "ERROR: Clocks QEL file not found: {{ clocks_qel }}"
+    exit 1
+}
+{% endif %}
+
+# Step 4: DB pruning stubs (moduleStub / instanceStub, xecmdref.pdf P366/P393)
+{% for stub in module_stubs %}
+{% if ' ' in stub %}
+moduleStub -add {{ '{' }}{{ stub }}{{ '}' }}
+{% else %}
+moduleStub -add {{ '{' }}{{ design_lib }} {{ stub }}{{ '}' }}
+{% endif %}
+{% endfor %}
+{% for stub in instance_stubs %}
+instanceStub -add {{ '{' }}{{ stub }}{{ '}' }}
+{% endfor %}
+
+# Step 5: Pre-precompile user hook & DRC/loop-breaking precompile
+{% for line in user_command_pre_precomp %}
+{{ line }}
+{% endfor %}
+precompile

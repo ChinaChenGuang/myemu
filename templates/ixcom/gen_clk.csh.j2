@@ -1,0 +1,24 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: IXCOM Clock Generation (ixclkgen)                                    ##}
+{## Reference: compileIXCOM.pdf (P286, P311), WXE 24.05                        ##}
+{## =========================================================================== ##}
+{% for line in pre_clkgen_lines %}
+{{ line }}
+if ( $status != 0 ) exit $status
+{% endfor %}
+ixclkgen \
+  -input {{ clk_cfg_script }} \
+  -output {{ clk_module }}.sv \
+  -module {{ clk_module }} \
+  -timescale {{ clk_timescale }} \
+  -use_ixc_clkgen \
+  -hierarchy "{{ clk_hierarchy }}"{% for opt in opts %} \
+  {{ opt }}{% endfor %}
+
+set rc = $status
+if ( $rc != 0 ) exit $rc
+{% for line in post_clkgen_lines %}
+{{ line }}
+if ( $status != 0 ) exit $status
+{% endfor %}

@@ -1,0 +1,21 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: IXCOM Analysis — VHDL (vhan)                                         ##}
+{## Reference: xecmdref.pdf "vhan" (P972-P973), WXE 24.05                      ##}
+{## =========================================================================== ##}
+mkdir -p ./WORK
+if ( $status != 0 ) exit $status
+
+{{ cmd | default('vhan') }} \
+  -work {{ worklib }} \
+  -libmaprc {{ libmaprc | default('libmaprc') }} \
+  -l analysis_{{ module_name }}_vhan.log \
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+{% for fl in filelists %}
+  -f {{ fl }}{% if not loop.last %} \{% endif %}
+
+{% endfor %}
+set rc = $status
+if ( $rc != 0 ) exit $rc

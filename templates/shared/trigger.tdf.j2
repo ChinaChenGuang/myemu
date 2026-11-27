@@ -1,0 +1,41 @@
+// ===========================================================================
+// Stage: SIM SDL Trigger Definition File (.tdf)
+// Reference: SDL.pdf P77-P78/P87-P89/P131-P149, WXE 24.05
+// ===========================================================================
+// Auto-generated Palladium SDL trigger definition for {{ db_name }}
+
+{% if tdf.scope %}
+scope {{ tdf.scope }};
+{% endif %}
+{% if tdf.trigger_pos is not none and tdf.trigger_pos != '' %}
+triggerPos = {{ tdf.trigger_pos }};
+{% elif tdf.post_trigger_samples is not none and tdf.post_trigger_samples != '' %}
+postTriggerSamples = {{ tdf.post_trigger_samples }};
+{% endif %}
+{% if tdf.enable1 %}
+ENABLE1 = {{ tdf.enable1 }};
+{% endif %}
+{% if tdf.enable2 %}
+ENABLE2 = {{ tdf.enable2 }};
+{% endif %}
+{% if tdf.counter1 is not none and tdf.counter1 != '' %}
+COUNTER1 = {{ tdf.counter1 }};
+{% endif %}
+{% if tdf.counter2 is not none and tdf.counter2 != '' %}
+COUNTER2 = {{ tdf.counter2 }};
+{% endif %}
+{% for alias_name, alias_expr in tdf.aliases.items() %}
+{{ alias_name }} = {{ alias_expr }};
+{% endfor %}
+{% for expr in tdf.triggers %}
+TRIGGER = {{ expr }};
+{% endfor %}
+{% for expr in tdf.acquire %}
+ACQUIRE = {{ expr }};
+{% endfor %}
+{% for expr in tdf.no_acquire %}
+NO_ACQUIRE = {{ expr }};
+{% endfor %}
+{% for line in tdf.extra_lines %}
+{{ line }}
+{% endfor %}

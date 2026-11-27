@@ -1,0 +1,55 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: IXCOM Single-Step Compilation (ixcom)                                ##}
+{## Reference: compileIXCOM.pdf P19/P189-P190, xecmdref.pdf P1058, emulator.pdf P15-P16 ##}
+{## =========================================================================== ##}
+mkdir -p ./WORK
+if ( $status != 0 ) exit $status
+
+{% if et3confg %}
+unsetenv XE_HOST
+setenv XE_HOST_FILE '{{ et3confg }}'
+{% elif emu_host %}
+setenv XE_HOST '{{ emu_host }}'
+{% endif %}
+{% if boards %}
+setenv XE_BOARDS '{{ boards }}'
+{% endif %}
+
+{{ cmd | default('ixcom') }} \
+  +sv -ua -libmaprc {{ libmaprc | default('libmaprc') }} \
+  +dut+{{ design_top }}{% if clk_module %}+{{ clk_module }}{% endif %} \
+  -top {{ testbench_top }} \
+{% if clk_module %}
+  -top {{ clk_module }} \
+  -timescale {{ clk_timescale }} \
+{% endif %}
+  {% if hw_mode %}+1xua {% endif %}+targetTop+{{ testbench_top }} -rtlNameForGenerate +tran_relax +tb_import_systf+stop \
+  +ignoreSimVerCheck -rtlchk warn \
+{% if vaelab_opts or parallel_hdlice or clk_module %}
+  -vaelabargs "{% if vaelab_opts %}{{ vaelab_opts | join(' ') }} {% endif %}{% if parallel_hdlice %}-parallel {{ parallel_hdlice }} {% endif %}-keepAllFlipFlop{% if clk_module %} -iscDelay={{ clk_module }}{% endif %}" \
+{% endif %}
+{% if hw_mode and use_custom_impt_qel %}
+  -xeCompile import=import.qel \
+{% endif %}
+{% if hw_mode and use_custom_comp_qel %}
+  -xeCompile compile=compile.qel \
+{% endif %}
+{% if hw_mode and xecompile_opts %}
+  -xecompileargs "{{ xecompile_opts | join(' ') }}" \
+{% endif %}
+{% if dump_mode == 'offline' %}
+  -enableLWD \
+{% endif %}
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+  -l ixcom_build.log
+set rc = $status
+if ( $rc != 0 ) exit $rc
+
+{% if dump_mode == 'offline' %}
+{{ cmd | default('ixcom') }} -target lwdmodel -l ixcom_lwd.log
+set rc = $status
+if ( $rc != 0 ) exit $rc
+{% endif %}

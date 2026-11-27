@@ -1,0 +1,18 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: IXCOM Multi-Step Pipeline Runner                                     ##}
+{## Reference: compileIXCOM.pdf P209-P216, WXE 24.05                            ##}
+{## =========================================================================== ##}
+tcsh ixcom_swmodel.csh
+set rc = $status
+if ( $rc != 0 ) exit $rc
+
+{% if hw_mode %}
+tcsh ixcom_hdlice.csh
+set rc = $status
+if ( $rc != 0 ) exit $rc
+
+tcsh ixcom_xecompile.csh
+set rc = $status
+if ( $rc != 0 ) exit $rc
+{% endif %}

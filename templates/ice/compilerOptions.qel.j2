@@ -1,0 +1,14 @@
+{## =========================================================================== ##}
+{## Stage: ICE PRECOMP/COMP — compilerOptions.qel                               ##}
+{## Reference: compileICE.pdf P94, xecmdref.pdf P316-P317, WXE 24.05           ##}
+{## Note: xecmdref.pdf P316 — Must execute before precompile and icePrepare    ##}
+{## =========================================================================== ##}
+# Auto-generated Palladium ICE compiler options for {{ db_name }}
+
+{% for opt in compiler_options or ['mode ice', 'visionMode FV'] %}
+{% if opt is mapping %}
+compilerOption -add {{ '{' }}{{ opt.key }} {{ opt.value }}{{ '}' }}
+{% else %}
+compilerOption -add {{ '{' }}{{ opt }}{{ '}' }}
+{% endif %}
+{% endfor %}

@@ -1,0 +1,47 @@
+#!/usr/bin/env tcsh
+{## =========================================================================== ##}
+{## Tool: Standalone filelist preprocessor (regex delete/replace + VHDL split)  ##}
+{## =========================================================================== ##}
+
+{% if items %}
+mkdir -p '{{ flist_dir }}'
+if ( $status != 0 ) exit $status
+
+which sd >& /dev/null
+if ( $status == 0 ) then
+    set flist_tool = "sd"
+else
+    set flist_tool = "sed"
+endif
+
+{% for item in items %}
+cp -f '{{ item.src }}' '{{ item.dst }}'
+if ( $status != 0 ) exit $status
+if ( "$flist_tool" == "sd" ) then
+{% if item.sd_delete_combined %}
+    sd '^.*(?:{{ item.sd_delete_combined }}).*\r?\n?' '' '{{ item.dst }}'
+    if ( $status != 0 ) exit $status
+{% endif %}
+{% for pair in item.sd_replace_pairs %}
+    sd '{{ pair.pat }}' '{{ pair.rep }}' '{{ item.dst }}'
+    if ( $status != 0 ) exit $status
+{% endfor %}
+else
+    sed -i -E \
+{% for expr in item.sed_exprs %}
+        -e '{{ expr }}' \
+{% endfor %}
+        '{{ item.dst }}'
+    if ( $status != 0 ) exit $status
+endif
+{% endfor %}
+{% endif %}
+{% if vhdl_split_items %}
+{% for lib in vhdl_out_libs %}
+rm -f '{{ comdir }}/{{ lib }}.f'
+{% endfor %}
+{% for src in vhdl_split_items %}
+awk -v outdir='{{ comdir }}' '/^[[:space:]]*($|#|\/\/|--)/{next} {lib=""; line=""; for(i=1;i<=NF;i++){if($i=="-work" && i<NF){lib=$(i+1); i++} else {line=(line==""?$i:line" "$i)}} if(length(lib)>0 && length(line)>0){print line >> (outdir "/" lib ".f")}}' '{{ src }}'
+if ( $status != 0 ) exit $status
+{% endfor %}
+{% endif %}

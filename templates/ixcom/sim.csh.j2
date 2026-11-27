@@ -1,0 +1,34 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: IXCOM Simulation Run (xrun -R)                                       ##}
+{## Reference: DebuggingDesigns.pdf P14, emulator.pdf P15-P16, WXE 24.05        ##}
+{## =========================================================================== ##}
+{% if et3confg %}
+unsetenv XE_HOST
+setenv XE_HOST_FILE '{{ et3confg }}'
+{% elif emu_host %}
+setenv XE_HOST '{{ emu_host }}'
+{% endif %}
+
+set DB_ARG = ""
+{% if db_path %}
+if ( -d "{{ db_path }}" ) then
+    set DB_ARG = "-xmlibdirname {{ db_path }}"
+else
+    echo "ERROR: IXCOM database directory not found: {{ db_path }}"
+    exit 1
+endif
+{% endif %}
+
+{{ cmd | default('xrun') }} -R $DB_ARG \
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+  -l sim.log \
+  -input {{ run_tcl | default('run.tcl') }}
+set rc = $status
+if ( $rc != 0 ) exit $rc
+{% for line in extra_lines %}
+{{ line }}
+if ( $status != 0 ) exit $status
+{% endfor %}

@@ -1,0 +1,107 @@
+{## =========================================================================== ##}
+{## Stage: ICE SIM — Palladium ICE Emulation Run Script (xeDebug -init)         ##}
+{## Reference: DebuggingDesigns.pdf P31, emulator.pdf P13,                      ##}
+{##            xecmdref.pdf P598/P605-P614/P620/P629/P686/P811-P813/P901/P911  ##}
+{## =========================================================================== ##}
+# Auto-generated Palladium ICE simulation script for {{ db_name }}
+
+# Load compiled Palladium database
+debug {{ db_path }} -session {{ session }}
+{% if target_relocate_script %}
+xeset targetRelocateScript {{ target_relocate_script }}
+{% endif %}
+
+# Connect to Palladium host (-path [pwd] avoids /net translation, emulator.pdf P13) & download design
+host {{ emu_host | default('.') }} -path [pwd]
+download
+{% if pm_mode %}
+configPM -{{ pm_mode }}
+{% endif %}
+{% for script in target_run_scripts %}
+if { [file exists "{{ script }}"] } {
+    source "{{ script }}"
+} else {
+    puts "ERROR: Target run script not found: {{ script }}"
+    exit 1
+}
+{% endfor %}
+{% for line in user_command_post_download %}
+{{ line }}
+{% endfor %}
+{% if wave.enable %}
+
+# Configure waveform trace buffer ({{ wave.name }})
+{% if wave.time_unit %}
+xeset timeUnit {{ wave.time_unit }}
+{% endif %}
+{% if wave.trigger_pos is not none and wave.trigger_pos != '' %}
+xeset triggerPos {{ wave.trigger_pos }}
+{% endif %}
+{% if wave.trace_mem_size %}
+xeset traceMemSize {{ wave.trace_mem_size }}
+{% endif %}
+database -open {{ wave.name }}{% if wave.continuous_upload %} -continuousupload{% if wave.mode == 'offline' %} -phy{% endif %}{% endif %}
+{% for script in wave.probe_scripts %}
+if { [file exists "{{ script }}"] } {
+    source "{{ script }}"
+} else {
+    puts "ERROR: Probe script not found: {{ script }}"
+    exit 1
+}
+{% endfor %}
+{% for line in wave.probes %}
+{{ line }}
+{% endfor %}
+{% if tdf_path %}
+
+# Load & enable SDL trigger definition (.tdf, xecmdref.pdf P833/P839/P842/P849/P859)
+if { [file exists "{{ tdf_path }}"] } {
+{% if tdf.auto_probe %}
+    sdl -auto on
+{% endif %}
+{% if tdf.halt_on_trigger %}
+    sdl -haltOnTrigger 1
+{% endif %}
+    sdl -setFile "{{ tdf_path }}"
+    sdl -load
+    sdl -enable
+} else {
+    puts "ERROR: SDL trigger file not found: {{ tdf_path }}"
+    exit 1
+}
+{% endif %}
+{% endif %}
+{% if tcl_file %}
+
+# Source user simulation Tcl/XEL script
+if { [file exists "{{ tcl_file }}"] } {
+    source "{{ tcl_file }}"
+} else {
+    puts "ERROR: Simulation script not found: {{ tcl_file }}"
+    exit 1
+}
+{% endif %}
+{% for line in user_command_pre_run %}
+{{ line }}
+{% endfor %}
+{% if run_cmd %}
+
+# Execute run command
+{{ run_cmd }}
+{% endif %}
+{% for line in user_command_post_run %}
+{{ line }}
+{% endfor %}
+{% if wave.enable and (run_cmd or auto_exit) %}
+
+# Flush and finalize waveform database
+catch { waitWhileBusy }
+{% if wave.mode == 'offline' %}
+database -prepareOffline
+{% else %}
+database -upload
+{% endif %}
+{% endif %}
+{% if auto_exit %}
+exit
+{% endif %}

@@ -1,0 +1,8 @@
+{## =========================================================================== ##}
+{## ICE Library Mapping File (va.lib)                                           ##}
+{## Reference: compileICE.pdf "Library Mapping File" (P49-P51), WXE 24.05     ##}
+{## =========================================================================== ##}
+{% for lib in worklibs %}
+DEFINE {{ lib.name }} {{ lib.path }}
+{% endfor %}
+DEFINE WORK {{ default_worklib | default('work') }}

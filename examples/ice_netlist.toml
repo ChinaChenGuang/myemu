@@ -1,0 +1,46 @@
+# KEMU ICE 前端 Netlist 独立示例配置（双文件解耦：1 份 netlist -> N 份 database）
+# 输出目录：<comdir>/netlist/soc_rtl_v1/（包含 va.lib、*.vg 与 netlist_manifest.toml）
+
+[env]
+emu_root = '/proj/soc/emu'
+setup_scripts = ['$EMU_ROOT/env/setup_palladium.csh']
+bsub = false
+queues = ['verif_r8', 'design_r8']
+
+[netlist]
+name = 'soc_rtl_v1'
+design_top = 'dut_top'
+testbench_top = 'tb_top'
+platform = 'Z2'
+desc = 'min system RTL netlist'
+
+[filelist]
+delete = ['sim_only_model\.sv$', '^\s*//']
+replace = [
+  ['rtl/mem/sram_behav\.v', 'emu/mem/sram_emu.v'],
+  ['\+define\+SIM_ONLY', '+define+PALLADIUM'],
+]
+
+[analysis]
+define_list = ['PALLADIUM']
+vlog_opts = ['-timescale 1ns/1ps']
+
+[[analysis.module]]
+name = 'dut_top'
+worklib = 'dut_lib'
+verilog_filelist = [
+  '$EMU_ROOT/rtl/flist/dut_verilog_flat.f',
+  '$EMU_ROOT/rtl/flist/palladium/mmp.f',
+  '$EMU_ROOT/rtl/flist/palladium/memory_module.f',
+]
+vhdl_filelist = ['$EMU_ROOT/rtl/flist/dut_vhdl_flat.f']
+define_list = ['DUT_ICE']
+
+[[analysis.module]]
+name = 'tb_top'
+worklib = 'tb_lib'
+verilog_filelist = ['$EMU_ROOT/tb/flist/tb_verilog_flat.f']
+define_list = ['ICE_TB']
+
+[elaborate]
+opts = ['-alu']

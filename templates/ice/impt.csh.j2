@@ -1,0 +1,13 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: ICE Import — Gate-Level Netlist Import (xeCompile)                   ##}
+{## Reference: xecmdref.pdf "xeCompile" (P194-P195), WXE 24.05                 ##}
+{## =========================================================================== ##}
+{{ cmd | default('xeCompile') }}{% if target_flag %} {{ target_flag }}{% endif %} \
+  -log impt.log \
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+  import.qel
+set rc = $status
+if ( $rc != 0 ) exit $rc

@@ -1,0 +1,97 @@
+# KEMU ICE 单文件一站式示例配置（同文件含 [netlist] 与 [database]；双文件解耦示例见 ice_netlist.toml + ice_db_fv.toml）
+# 完整可选字段与高级覆写说明见 TOML_SPEC.md
+
+[netlist]
+name = 'soc_rtl_v1'
+design_top = 'dut_top'
+testbench_top = 'tb_top'
+desc = 'min system RTL netlist'
+
+[database]
+name = 'base'
+desc = 'min system ICE database'
+
+[env]
+emu_root = '/proj/soc/emu'
+setup_scripts = ['$EMU_ROOT/env/setup_palladium.csh']
+bsub = false
+queues = ['verif_r8', 'design_r8']
+
+[env.vars]
+XE_NOECHO = '1'
+XE_ICE_FAST_DOWNLOAD = '1'
+
+[emulator]
+active = 'horizon_z2'
+target_system = 'Z2'
+
+[emulator.machines]
+horizon_z2 = { host = 'horizon_z2', et3confg = '/match3/scd.et3confg' }
+emu_z2 = { host = 'emu_z2', et3confg = 'match3/scd.et3confg.emu_z2' }
+
+[filelist]
+delete = ['sim_only_model\.sv$', '^\s*//']
+replace = [
+  [
+    'rtl/mem/sram_behav\.v',
+    'emu/mem/sram_emu.v',
+  ],
+  [
+    '\+define\+SIM_ONLY',
+    '+define+PALLADIUM',
+  ],
+]
+
+[analysis]
+define_list = ['PALLADIUM']
+vlog_opts = ['-timescale 1ns/1ps']
+
+[[analysis.module]]
+name = 'dut_top'
+worklib = 'dut_lib'
+verilog_filelist = [
+  '$EMU_ROOT/rtl/flist/dut_verilog_flat.f',
+  '$EMU_ROOT/rtl/flist/palladium/mmp.f',
+  '$EMU_ROOT/rtl/flist/palladium/memory_module.f',
+]
+vhdl_filelist = ['$EMU_ROOT/rtl/flist/dut_vhdl_flat.f']
+define_list = ['DUT_ICE']
+
+[[analysis.module]]
+name = 'tb_top'
+worklib = 'tb_lib'
+verilog_filelist = ['$EMU_ROOT/tb/flist/tb_verilog_flat.f']
+define_list = ['ICE_TB']
+
+[precomp]
+clocks_qel = '$EMU_ROOT/qel/clocks.qel' # 由 tools/emu_gen_clocks 解析 DE 时钟表格生成
+keep_nets = ['dut_top.clk_gen.*']
+precompile_options = ['asyncReset']
+# module_stubs = ['gpu_core']           # 可选：按模块裁剪（moduleStub）
+# instance_stubs = ['dut_top.u_npu']    # 可选：按层次实例路径裁剪（instanceStub）
+
+[comp]
+flow = 'unified'
+compiler_options = ['visionMode FV']
+boards = '0-5'
+# symmetric_boards = '0-17' # 可选：启用单机 symmetric compile 扩域（写 'ALL' 则扩到整机）
+# compile_cmd = 'compile'
+
+[sim]
+tcl_file = '$EMU_ROOT/sim/run_ice.tcl'
+opts = ['-fsdb']
+# pm_mode = 'la'            # 可选：'la' / 'stb' / 'vd'
+# run_cmd = 'run'           # 可选：留空则由 tcl_file 或 XE> 交互控制
+# auto_exit = false
+
+[sim.wave]
+enable = false
+mode = 'offline'
+name = 'wave'
+time_unit = 'ns'
+trigger_pos = 50
+
+[release]
+dest_dir = '$EMU_ROOT/release'
+include = ['xe_db', 'import.qel', 'precompile.qel', 'compile.qel', 'sim.csh']
+exclude = ['*.tmp', '*.bak']

@@ -1,0 +1,24 @@
+{% include 'shared/_env_header.csh.j2' %}
+{## =========================================================================== ##}
+{## Stage: IXCOM Analysis — Verilog/SystemVerilog (vlan)                        ##}
+{## Reference: xecmdref.pdf "vlan" (P1007-P1008), WXE 24.05                    ##}
+{## =========================================================================== ##}
+mkdir -p ./WORK
+if ( $status != 0 ) exit $status
+
+{{ cmd | default('vlan') }} \
+  -work {{ worklib }} \
+  -libmaprc {{ libmaprc | default('libmaprc') }} \
+  -l analysis_{{ module_name }}_vlan.log \
+{% for macro in define_list | default([]) %}
+  +define+{{ macro }} \
+{% endfor %}
+{% for opt in opts %}
+  {{ opt }} \
+{% endfor %}
+{% for fl in filelists %}
+  -f {{ fl }}{% if not loop.last %} \{% endif %}
+
+{% endfor %}
+set rc = $status
+if ( $rc != 0 ) exit $rc
