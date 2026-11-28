@@ -51,7 +51,6 @@ worklib = 'tb_lib'
 verilog_filelist = ['$EMU_ROOT/tb/flist/tb_verilog_flat.f']
 
 [ixcom]
-compile_mode = 'multi'
 parallel_hdlice = 4
 dump_mode = 'online'
 

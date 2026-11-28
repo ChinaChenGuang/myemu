@@ -34,9 +34,9 @@
    - `kemu` 编译与仿真**不使用外部 shell 中的环境变量**，Python 侧解析路径与渲染脚本时**绝不读取 `os.environ`**。
    - `[env].emu_root` 与可选 `[env.vars]` 显式定义运行时所需全部环境变量；`[env.vars]` 优先直接使用 Cadence WXE 24.05 官方环境变量（`GenericSettingUp_PD.pdf` P32–P55、`xecmdref.pdf` P203–P204, P354, P945），既减少重复封装配置，又避免不同平台/宿主机残留环境变量造成冲突。
    - 生成的 `.csh` 脚本采用 `#!/usr/bin/env tcsh`，开头先设置 `setenv EMU_ROOT '<emu_root>'`（若 `[env.vars]` 含 `XE_HOST_FILE` 则先执行 `unsetenv XE_HOST`，见 `emulator.pdf` P16），再按序 `setenv` `[env.vars]`，接着依次 `source [env].setup_scripts`，并通过显式检查 `$status` 传递退出码（不启用全局 `-e`，避免第三方 EDA `setup_*.csh` 脚本内部状态误中止）。
-4. **`EMU_ROOT` 路径锚点、`-db` 简写与 `--comdir` 对称目录约定**：
+4. **`EMU_ROOT` 路径锚点、`--db` 参数与 `--comdir` 对称目录约定**：
    - `[env].emu_root` 必须配置为**绝对路径**，作为其他相对路径以及 `$EMU_ROOT` 引用的唯一锚点，并自动导出为环境变量 `EMU_ROOT`。
-   - CLI **`-db <db_name>`（同时兼容 `--db`）**：传入 `<db_name>` 时**不需要加 `.toml` 后缀**，解析器自动补齐 `.toml`（若传入路径已带 `.toml` 后缀亦可直接识别）。
+   - CLI **`--db <db_name>`**：传入 `<db_name>` 时**不需要加 `.toml` 后缀**，解析器自动补齐 `.toml`（若传入路径已带 `.toml` 后缀亦可直接识别）。
    - 若配置项中出现相对路径（非 `/` 开头、非 `$VAR` 开头），统一以 `EMU_ROOT` 为基准解析；CLI 路径参数（`--comdir`、`--db-path`、`--simdir`）遵循同样规则：绝对路径直接使用，相对路径统一以 `EMU_ROOT` 为基准解析（不额外引入 `--netlist-dir`）。
    - **统一 `--comdir` 下的前后端对称工作目录**（支持同 `--comdir` 下 1 个 netlist 挂 N 个 database 并行互不覆盖）：
      - **ICE 前端目录 `<comdir>/netlist/<netlist.name>/`**：`analysis`、`elaborate`、`syn` 的工作目录（产出 `va.lib`、`*.vg` 与 `netlist_manifest.toml`）。
@@ -330,7 +330,7 @@ define_list = [
 
 ### 3.6 `[elaborate]` — ICE 顶层并行展开与综合（`vaelab`）
 
-对应 `kemu build ice -db <db_name> --comdir <path> --act elaborate`（以及 `--act syn` 的第二步）。依据 `compileICE.pdf` P58–P68，`vaelab` 接受顶层名作为位置参数 `vaelab <topModule> -logFile <log> -outputVlog <name>.vg -vaLib va.lib`（不接受 `-top`），跨库使用 `-refLib`。默认在 `<comdir>/netlist/<netlist.name>/` 并发执行 `[netlist].design_top` 与 `[netlist].testbench_top` 两路 `vaelab`，完成后自动生成产物契约 `netlist_manifest.toml`。
+对应 `kemu build ice --db <db_name> --comdir <path> --act elaborate`（以及 `--act syn` 的第二步）。依据 `compileICE.pdf` P58–P68，`vaelab` 接受顶层名作为位置参数 `vaelab <topModule> -logFile <log> -outputVlog <name>.vg -vaLib va.lib`（不接受 `-top`），跨库使用 `-refLib`。默认在 `<comdir>/netlist/<netlist.name>/` 并发执行 `[netlist].design_top` 与 `[netlist].testbench_top` 两路 `vaelab`，完成后自动生成产物契约 `netlist_manifest.toml`。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
@@ -352,7 +352,7 @@ opts = [
 
 ### 3.7 `[impt]` — ICE 导入网表（`xeCompile import.qel`）
 
-对应 `kemu build ice -db <db_name> --comdir <path> --act impt`。依据 `xecmdref.pdf` P230–P232 与 `compileICE.pdf` P17–P18，模板使用 `importOption`、`netlistFile`、`refLib` 与 `designImport`（当 `[env].bsub = true` 时自动附加 `-useLSF`，`emulator.pdf` P123），并渲染 `impt.csh` 调用 `xeCompile [-z2|-z3] -log impt.log import.qel`（`xecmdref.pdf` P194–P195）。默认自动从 `<comdir>/netlist/<netlist>/netlist_manifest.toml` 读取 `.vg` 路径，若无须覆写则**整个 `[impt]` Section 可省略**。
+对应 `kemu build ice --db <db_name> --comdir <path> --act impt`。依据 `xecmdref.pdf` P230–P232 与 `compileICE.pdf` P17–P18，模板使用 `importOption`、`netlistFile`、`refLib` 与 `designImport`（当 `[env].bsub = true` 时自动附加 `-useLSF`，`emulator.pdf` P123），并渲染 `impt.csh` 调用 `xeCompile [-z2|-z3] -log impt.log import.qel`（`xecmdref.pdf` P194–P195）。默认自动从 `<comdir>/netlist/<netlist>/netlist_manifest.toml` 读取 `.vg` 路径，若无须覆写则**整个 `[impt]` Section 可省略**。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
@@ -375,7 +375,7 @@ ref_libs = [
 
 ### 3.8 `[precomp]` — ICE 预编译检查与 DB 裁剪（`xeCompile precompile.qel`）
 
-对应 `kemu build ice -db <db_name> --comdir <path> --act precomp`。依据 `compileICE.pdf` P94, P113 与 `xecmdref.pdf` P316, P353, P366, P374–P375, P393, P407–P408, P546：
+对应 `kemu build ice --db <db_name> --comdir <path> --act precomp`。依据 `compileICE.pdf` P94, P113 与 `xecmdref.pdf` P316, P353, P366, P374–P375, P393, P407–P408, P546：
 - 渲染生成 `compilerOptions.qel`（由 `[comp].compiler_options` 与 `[comp].flow` 合成，并在 `precompile` **之前**执行 `source compilerOptions.qel`——严格满足 `xecmdref.pdf` P316 *"must be executed before running the precompile and icePrepare command sequence"*）、`precompileOptions.qel`、`keepNets.qel`、`precompile.qel` 与 `precomp.csh`，并在配置了 `clocks_qel` 时引入外部 `clocks.qel`。
 - `precompile.qel` **不写入** `emulatorConfiguration`（`precompile` 阶段不使用硬件配置，`xecmdref.pdf` P353），环境变量由 `precomp.csh` 头部统一导出，集群调度由 `[env].bsub` 与 `computeFarm.json` 控制。
 
@@ -413,7 +413,7 @@ instance_stubs = [
 
 ### 3.9 `[comp]` 与 `[[comp.symmetric]]` — Database 最终编译与 Symmetric Compile
 
-对应 `kemu build ice -db <db_name> --comdir <path> --act comp`（以及 IXCOM 的自定义 `compile.qel`）。依据 `compileICE.pdf` P117–P118、`emulator.pdf` P15–P29, P117 与 `xecmdref.pdf` P316–P317, P353–P354, P459–P461, P545–P546：
+对应 `kemu build ice --db <db_name> --comdir <path> --act comp`（以及 IXCOM 的自定义 `compile.qel`）。依据 `compileICE.pdf` P117–P118、`emulator.pdf` P15–P29, P117 与 `xecmdref.pdf` P316–P317, P353–P354, P459–P461, P545–P546：
 - `compile.qel` 严格遵循官方执行时序：`design` -> `source compilerOptions.qel`（含 `mode`、`visionMode` 与 PPC `distributedMulticore ON`）-> `emulatorConfiguration` / `symmetricConfiguration` -> `target_compile_scripts` -> `user_command_pre_comp` ->（按需 `icePrepare`）-> `compile_cmd` -> `user_command_post_comp`。
 - **注意**：修改了影响前端预处理的 `compiler_options`（如 `mode`、`visionMode` 或切换 `flow = 'ppc'`）时，需同步重跑 `precomp` 使 `precompile` 与编译期选项保持一致（`xecmdref.pdf` P316）。
 - 支持三档渐进配置 `symmetricConfiguration`：不写则不启用；单机扩域仅需在 `[comp]` 写一行 `symmetric_boards`；多机 / 指定落点 / `advancedPlacements` 场景通过 `[[comp.symmetric]]` 配置（不可同时写 `symmetric_boards` 与 `[[comp.symmetric]]`）。
@@ -479,15 +479,14 @@ locations = ['0.2+0.3']
 
 ### 3.10 `[ixcom]` — IXCOM（SA）编译配置（`vlan`/`vhan`/`ixcom`）
 
-对应 `kemu build ixcom -db <db_name> --comdir <path> [--act analysis|swmodel|hdlice|xecompile|all] [--gen-only]`（`-db` 无需 `.toml` 后缀）。依据 `compileIXCOM.pdf` P17–P50, P189–P216, P306、`emulator.pdf` P15–P16 与 `xecmdref.pdf` P972, P1007, P1058：
-- 多步模式使用 `libmaprc` + `vlan`/`vhan` + `ixcom -target <stage>`；单步模式使用 `ixcom` 直接编译。
+对应 `kemu build ixcom --db <db_name> --comdir <path> --act <analysis|comp|all> [--gen-only]`（`--db` 无需 `.toml` 后缀）。依据 `compileIXCOM.pdf` P17–P50, P189–P216, P306、`emulator.pdf` P15–P16 与 `xecmdref.pdf` P972, P1007, P1058：
+- 当前采用单次编译最小闭环：`analysis` 阶段生成 `libmap.rc`、按需运行 `ixclkgen` 并执行 `vlan` / `vhan`；`comp` 阶段单次运行 `ixcom` 编译（暂不使用 `-target` 分阶段编译，留作后续优化迭代）。
 - 硬件目标通过环境变量 `XE_HOST`（或互斥的 `XE_HOST_FILE`）与 `XE_BOARDS` 传入。
 - 官方建议优先使用 `compilerOptions.qel` 引导 IXCOM 编译流程（`compileIXCOM.pdf` P49），仅在确有需要时开启 `use_custom_impt_qel` / `use_custom_comp_qel`。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
-| `compile_mode` | string | 否 | `'multi'` | IXCOM 编译模式：`'multi'`（分步 `swmodel` -> `hdlice` -> `xecompile`）或 `'single'`（单步） |
-| `hw_mode` | bool | 否 | `true` | `true` 编译硬件加速（`+1xua` + `hdlice` + `xecompile`）；`false` 仅软件仿真模型 |
+| `hw_mode` | bool | 否 | `true` | `true` 编译硬件加速模型（`+1xua`）；`false` 仅软件仿真模型 |
 | `parallel_hdlice` | int | 否 | `4` | 传递 `-parallelHdliceAnalyze <N>` / `-vaelabargs "... -parallel <N>"`（`compileIXCOM.pdf` P39–P40, P190） |
 | `dump_mode` | string | 否 | `'online'` | 波形模式：`'online'` 或 `'offline'`（`offline` 自动附加 `-enableLWD` 并运行 `ixcom -target lwdmodel`，`compileIXCOM.pdf` P210） |
 | `vaelab_opts` | list[str] | 否 | `[]` | 透传给 `-vaelabargs` 的额外选项列表（如 `['-alu', '-minMemSize 64']`） |
@@ -500,7 +499,6 @@ locations = ['0.2+0.3']
 
 ```toml
 [ixcom]
-compile_mode = 'multi'
 hw_mode = true
 parallel_hdlice = 4
 dump_mode = 'online'
@@ -516,8 +514,8 @@ vaelab_opts = [
 对应 CLI：
 
 ```csh
-kemu sim ice   -db <db_name> --db-path <path> --simdir <path> --session <session_name> [--gen-only]
-kemu sim ixcom -db <db_name> --db-path <path> --simdir <path> --session <session_name> [--gen-only]
+kemu sim ice   --db <db_name> --db-path <path> --simdir <path> --session <session_name> [--gen-only]
+kemu sim ixcom --db <db_name> --db-path <path> --simdir <path> --session <session_name> [--gen-only]
 ```
 
 `[sim]` 中**不配置 `db_path`**，而是由 CLI `--db-path` 传入。依据 `DebuggingDesigns.pdf` P14, P27–P31、`emulator.pdf` P13, P16、`SDL.pdf` P131–P149 与 `xecmdref.pdf` P202–P203, P598, P605–P614, P620–P621, P629, P686–P687, P784–P786, P811–P813, P833–P859, P901, P911, P1587：
@@ -628,7 +626,7 @@ err = 'err_valid && err_code != 0'
 
 ### 3.12 `[release]` — 发布打包配置
 
-对应 `kemu release -db <db_name> --comdir <path> --type <tar|DB>`（`-db` 无需 `.toml` 后缀）。
+对应 `kemu release --db <db_name> --comdir <path> --type <tar|DB>`（`--db` 无需 `.toml` 后缀）。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
@@ -662,8 +660,8 @@ exclude = [
 
 ## 4. 校验规则（`db_config.py` 实现约束）
 
-1. **按需校验与 `-db` 简写解析**：
-   - CLI 参数 `-db <db_name>`（兼容 `--db`）自动将未带 `.toml` 后缀的名称补全为 `<db_name>.toml`；若已带 `.toml` 后缀则直接使用。
+1. **按需校验与 `--db` 参数解析**：
+   - CLI 参数 `--db <db_name>` 自动将未带 `.toml` 后缀的名称补全为 `<db_name>.toml`；若已带 `.toml` 后缀则直接使用。
    - 公共必填项为 `[env].emu_root`；各命令仅按当前执行阶段校验所需 Section：
      - **ICE 前端（`analysis` / `elaborate` / `syn`）**：必填 `[netlist].name` 与 `[netlist].design_top`；无需填写 `[database]`、`[emulator]`、`[comp]`、`[sim]`、`[release]`。
      - **ICE 后端（`impt` / `precomp` / `comp`）**：必填 `[database].name`；定位网表按 `[database].netlist_dir` > `<comdir>/netlist/<[database].netlist or [netlist].name>/netlist_manifest.toml` > `[impt].netlist_files` 优先级解析，至少满足其一；存在 `netlist_manifest.toml` 时自动继承 `design_top` / `testbench_top`。
@@ -677,7 +675,7 @@ exclude = [
 4. **`analysis` / `precomp` / `comp` / `ixcom` / `filelist` 校验**：
    - 执行 `analysis` 或 `syn` 时，`[[analysis.module]]` 至少配置 1 项；各 module 的 `name` 不可重复，且 `name` 与 `worklib` 必须满足 `[A-Za-z0-9_-]+`；每个 module 的 `verilog_filelist` 与 `vhdl_filelist` 至少非空一项；`define_list` 仅填写纯宏名或赋值（如 `'PALLADIUM'`、`'CLK_FREQ=100'`），不带 `+define+` 前缀（由模板自动拼接）。
    - `[filelist].replace` 每一项必须为长度为 2 的字符串列表 `[old_regex, new_str]`，且 `delete` / `replace` 中的正则语法合法。
-   - `[comp].flow` 仅允许 `'unified'` / `'ppc'`；`[impt].mode` 仅允许 `'full'` / `'incr'`；`[ixcom].compile_mode` 仅允许 `'multi'` / `'single'`；`[ixcom].dump_mode` 仅允许 `'online'` / `'offline'`；`[sim].pm_mode` 仅允许 `''` / `'la'` / `'stb'` / `'vd'`；`[sim.wave].mode` 仅允许 `'offline'` / `'online'`，`trigger_pos` 须在 `0..100` 且 `num_files >= 0`；`[sim.tdf]` 中 `trigger_pos`（`0..100`）与 `post_trigger_samples`（`>= 0`）互斥、`acquire` 与 `no_acquire` 互斥（`SDL.pdf` P137, P139, P147, P149），且 `tdf_file` 与内联渲染字段（`scope`/`triggers`/`acquire`/`no_acquire`/`aliases`/`extra_lines`）互斥。
+   - `[comp].flow` 仅允许 `'unified'` / `'ppc'`；`[impt].mode` 仅允许 `'full'` / `'incr'`；`[ixcom].dump_mode` 仅允许 `'online'` / `'offline'`；`[sim].pm_mode` 仅允许 `''` / `'la'` / `'stb'` / `'vd'`；`[sim.wave].mode` 仅允许 `'offline'` / `'online'`，`trigger_pos` 须在 `0..100` 且 `num_files >= 0`；`[sim.tdf]` 中 `trigger_pos`（`0..100`）与 `post_trigger_samples`（`>= 0`）互斥、`acquire` 与 `no_acquire` 互斥（`SDL.pdf` P137, P139, P147, P149），且 `tdf_file` 与内联渲染字段（`scope`/`triggers`/`acquire`/`no_acquire`/`aliases`/`extra_lines`）互斥。
    - `[comp].symmetric_boards` 与 `[[comp.symmetric]]` 不可同时配置；在 `[[comp.symmetric]]` 单项中 `emulator`、`host` 与 `file` 三者互斥（至多指定其一；全省略时复用 `[emulator].active`），若填写 `emulator` 则必须在 `[emulator.machines]` 中存在，且 `advanced_placements` 仅允许在配置了 `boards` 时使用（`emulator.pdf` P28）。
 5. **发布前检查**：`[release].include` 中的每一项在打包/拷贝前先检查是否存在，缺失时列出所有缺失项并中止，避免产出残缺发布包。
 

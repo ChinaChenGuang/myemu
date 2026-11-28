@@ -18,13 +18,13 @@ class ConfigError(ValueError):
 
 
 _IDENT_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
 
 VALID_TARGET_SYSTEMS = ("Z2", "Z3", "Z3_Lsystem")
 VALID_FARM_NAMES = ("LSF", "NC", "custom")
 VALID_IMPT_MODES = ("full", "incr")
 VALID_COMP_FLOWS = ("unified", "ppc")
-VALID_IXCOM_COMPILE_MODES = ("multi", "single")
 VALID_IXCOM_DUMP_MODES = ("online", "offline")
 VALID_PM_MODES = ("", "la", "stb", "vd")
 VALID_WAVE_MODES = ("offline", "online")
@@ -65,7 +65,7 @@ SECTION_KEYS: dict[str, frozenset[str]] = {
     }),
     "comp.symmetric": frozenset({"emulator", "host", "file", "boards", "locations", "advanced_placements"}),
     "ixcom": frozenset({
-        "compile_mode", "hw_mode", "parallel_hdlice", "dump_mode",
+        "hw_mode", "parallel_hdlice", "dump_mode",
         "vaelab_opts", "xecompile_opts", "use_custom_impt_qel",
         "use_custom_comp_qel", "opts", "bsub_opts", "queues",
     }),
@@ -87,7 +87,20 @@ SECTION_KEYS: dict[str, frozenset[str]] = {
     "release": frozenset({"dest_dir", "db_prefix", "include", "exclude"}),
 }
 
-INLINE_TDF_RENDER_FIELDS = ("scope", "triggers", "acquire", "no_acquire", "aliases", "extra_lines")
+INLINE_TDF_RENDER_FIELDS = (
+    "scope",
+    "trigger_pos",
+    "post_trigger_samples",
+    "enable1",
+    "enable2",
+    "counter1",
+    "counter2",
+    "aliases",
+    "triggers",
+    "acquire",
+    "no_acquire",
+    "extra_lines",
+)
 
 
 def _norm_posix(path_str: str) -> str:
@@ -96,10 +109,10 @@ def _norm_posix(path_str: str) -> str:
 
 
 def resolve_db_path(db_arg: str) -> Path:
-    """Resolve CLI ``-db <db_name>`` (auto-appending ``.toml`` when omitted)."""
+    """Resolve CLI ``--db <db_name>`` (auto-appending ``.toml`` when omitted)."""
     text = db_arg.strip()
     if not text:
-        raise ConfigError("CLI -db argument must not be empty.")
+        raise ConfigError("CLI --db argument must not be empty.")
     if not text.endswith(".toml"):
         text = f"{text}.toml"
     path = Path(text)
@@ -195,6 +208,29 @@ def _check_enum(value: str, allowed: tuple[str, ...], field_path: str) -> None:
     if value not in allowed:
         opts = ", ".join(repr(x) for x in allowed)
         raise ConfigError(f"{field_path}='{value}' is invalid; expected one of: {opts}.")
+
+
+def validate_session_name(session: str) -> str:
+    """Validate CLI ``--session`` name for ``xeDebug -session <name>``."""
+    text = session.strip()
+    if not text or not _IDENT_RE.match(text):
+        raise ConfigError(
+            f"CLI --session='{session}' is invalid; must be non-empty matching [A-Za-z0-9_-]+."
+        )
+    return text
+
+
+def _resolve_path_list(
+    tbl: dict[str, Any],
+    key: str,
+    field_prefix: str,
+    emu_root: Path,
+    env_map: dict[str, str],
+) -> list[str]:
+    return [
+        resolve_path(p, emu_root, env_map, f"{field_prefix}[{i}]")
+        for i, p in enumerate(_require_str_list(tbl.get(key, []), field_prefix))
+    ]
 
 
 @dataclass
@@ -339,7 +375,6 @@ class CompConfig:
 
 @dataclass
 class IxcomConfig:
-    compile_mode: str = "multi"
     hw_mode: bool = True
     parallel_hdlice: int = 4
     dump_mode: str = "online"
@@ -454,13 +489,7 @@ class KemuConfig:
 
     def effective_platform(self) -> str:
         """Return target platform for ICE elaborate (``[netlist].platform`` or emulator fallback)."""
-        if self.netlist.platform:
-            return self.netlist.platform
-        if self.emulator.active and self.emulator.active in self.emulator.machines:
-            m = self.emulator.machines[self.emulator.active]
-            if m.target_system:
-                return m.target_system
-        return self.emulator.target_system or "Z2"
+        return self.netlist.platform or self.effective_target_system()
 
     def effective_compiler_options(self) -> list[str]:
         """Merge baseline ``['mode ice', 'visionMode FV']`` + ``[comp].compiler_options`` + PPC flow."""
@@ -566,15 +595,15 @@ class KemuConfig:
                 if not self.database.name:
                     raise ConfigError(f"[database].name is required for 'build ice --act {act}'.")
                 self.active_machine()
-                has_source = bool(
-                    self.database.netlist_dir
-                    or self.effective_netlist_name()
-                    or self.impt.netlist_files
-                )
-                if not has_source:
+                has_manifest_src = bool(self.database.netlist_dir or self.effective_netlist_name())
+                if not has_manifest_src and not self.impt.netlist_files:
                     raise ConfigError(
                         f"Cannot locate netlist for 'build ice --act {act}': set [netlist].name, "
                         "[database].netlist, [database].netlist_dir, or [impt].netlist_files."
+                    )
+                if not has_manifest_src and not (self.database.design_top or self.netlist.design_top):
+                    raise ConfigError(
+                        "[database].design_top (or [netlist].design_top) is required when importing bare [impt].netlist_files."
                     )
                 if act == "comp":
                     self.resolve_symmetric_configs()
@@ -583,7 +612,7 @@ class KemuConfig:
             return
 
         if command == "build" and mode == "ixcom":
-            if act not in ("analysis", "swmodel", "hdlice", "xecompile", "all"):
+            if act not in ("analysis", "comp", "all"):
                 raise ConfigError(f"Unsupported IXCOM build action: '{act}'.")
             if self.netlist.name:
                 if act in ("analysis", "all"):
@@ -600,7 +629,7 @@ class KemuConfig:
                     raise ConfigError(f"[database].design_top is required for 'build ixcom --act {act}'.")
                 if act in ("analysis", "all") and not self.analysis.modules:
                     raise ConfigError(f"At least one [[analysis.module]] is required for 'build ixcom --act {act}'.")
-            if self.ixcom.hw_mode and act in ("xecompile", "all"):
+            if self.ixcom.hw_mode and act in ("comp", "all"):
                 self.active_machine()
             return
 
@@ -643,8 +672,12 @@ def _parse_env(raw: dict[str, Any]) -> tuple[EnvConfig, Path, dict[str, str]]:
     vars_tbl = _require_table(env_tbl.get("vars", {}), "env.vars")
     parsed_vars: dict[str, str] = {}
     for k, v in vars_tbl.items():
+        if not _ENV_KEY_RE.match(k):
+            raise ConfigError(f"[env.vars].{k}: invalid environment variable name (must match [A-Za-z_][A-Za-z0-9_]*).")
         if not isinstance(v, str):
             raise ConfigError(f"[env.vars].{k} must be a string, got {type(v).__name__}.")
+        if "'" in v:
+            raise ConfigError(f"[env.vars].{k} must not contain single quotes (unsafe inside tcsh single-quoted setenv).")
         if k == "EMU_ROOT" and _norm_posix(v) != emu_root_str:
             raise ConfigError("[env.vars].EMU_ROOT conflicts with [env].emu_root; configure EMU_ROOT in [env].emu_root only.")
         expanded_v = expand_env_vars(v, env_map, f"[env.vars].{k}")
@@ -653,10 +686,7 @@ def _parse_env(raw: dict[str, Any]) -> tuple[EnvConfig, Path, dict[str, str]]:
     if "XE_HOST" in parsed_vars and "XE_HOST_FILE" in parsed_vars:
         raise ConfigError("[env.vars] cannot specify both XE_HOST and XE_HOST_FILE (emulator.pdf P16).")
 
-    setup_scripts = [
-        resolve_path(s, emu_root_path, env_map, f"[env].setup_scripts[{i}]")
-        for i, s in enumerate(_require_str_list(env_tbl.get("setup_scripts", []), "[env].setup_scripts"))
-    ]
+    setup_scripts = _resolve_path_list(env_tbl, "setup_scripts", "[env].setup_scripts", emu_root_path, env_map)
     bsub = _require_bool(env_tbl.get("bsub", False), "[env].bsub")
     queues = _require_str_list(env_tbl.get("queues", []), "[env].queues")
     bsub_opts = _require_str_list(env_tbl.get("bsub_opts", []), "[env].bsub_opts")
@@ -833,14 +863,8 @@ def _parse_analysis(raw: dict[str, Any], emu_root: Path, env_map: dict[str, str]
             raise ConfigError(f"[[analysis.module]][{idx}].worklib must not be empty.")
         _check_ident(worklib, f"[[analysis.module]][{idx}].worklib")
 
-        vlogs = [
-            resolve_path(p, emu_root, env_map, f"[[analysis.module]][{idx}].verilog_filelist[{j}]")
-            for j, p in enumerate(_require_str_list(m_tbl.get("verilog_filelist", []), f"[[analysis.module]][{idx}].verilog_filelist"))
-        ]
-        vhdls = [
-            resolve_path(p, emu_root, env_map, f"[[analysis.module]][{idx}].vhdl_filelist[{j}]")
-            for j, p in enumerate(_require_str_list(m_tbl.get("vhdl_filelist", []), f"[[analysis.module]][{idx}].vhdl_filelist"))
-        ]
+        vlogs = _resolve_path_list(m_tbl, "verilog_filelist", f"[[analysis.module]][{idx}].verilog_filelist", emu_root, env_map)
+        vhdls = _resolve_path_list(m_tbl, "vhdl_filelist", f"[[analysis.module]][{idx}].vhdl_filelist", emu_root, env_map)
         if not vlogs and not vhdls:
             raise ConfigError(f"[[analysis.module]] '{name}' must specify at least one of verilog_filelist or vhdl_filelist.")
         m_defs = _require_str_list(m_tbl.get("define_list", []), f"[[analysis.module]][{idx}].define_list")
@@ -889,15 +913,16 @@ def _parse_impt(raw: dict[str, Any], emu_root: Path, env_map: dict[str, str]) ->
     _check_keys(tbl, "impt", "impt")
     mode = _require_str(tbl.get("mode", "full"), "[impt].mode")
     _check_enum(mode, VALID_IMPT_MODES, "[impt].mode")
-    nl_files = [
-        resolve_path(p, emu_root, env_map, f"[impt].netlist_files[{i}]")
-        for i, p in enumerate(_require_str_list(tbl.get("netlist_files", []), "[impt].netlist_files"))
+    nl_files = _resolve_path_list(tbl, "netlist_files", "[impt].netlist_files", emu_root, env_map)
+    extra_netlists = [
+        expand_env_vars(entry, env_map, f"[impt].extra_netlists[{i}]")
+        for i, entry in enumerate(_require_str_list(tbl.get("extra_netlists", []), "[impt].extra_netlists"))
     ]
     return ImptConfig(
         mode=mode,
         ref_libs=_require_str_list(tbl.get("ref_libs", ["qtref", "generic"]), "[impt].ref_libs"),
         netlist_files=nl_files,
-        extra_netlists=_require_str_list(tbl.get("extra_netlists", []), "[impt].extra_netlists"),
+        extra_netlists=extra_netlists,
         opts=_require_str_list(tbl.get("opts", []), "[impt].opts"),
     )
 
@@ -961,10 +986,15 @@ def _parse_comp(raw: dict[str, Any], emu_root: Path, env_map: dict[str, str], ma
         s_boards = _require_str_list(s_tbl.get("boards", []), f"[[comp.symmetric]][{idx}].boards")
         s_locs = _require_str_list(s_tbl.get("locations", []), f"[[comp.symmetric]][{idx}].locations")
         adv = _require_str(s_tbl.get("advanced_placements", ""), f"[[comp.symmetric]][{idx}].advanced_placements")
-        if adv and not s_boards:
-            raise ConfigError(
-                f"[[comp.symmetric]][{idx}].advanced_placements requires non-empty 'boards' (emulator.pdf P28)."
-            )
+        if adv:
+            if not s_boards:
+                raise ConfigError(
+                    f"[[comp.symmetric]][{idx}].advanced_placements requires non-empty 'boards' (emulator.pdf P28)."
+                )
+            if adv != "MAX" and (not adv.isdigit() or int(adv) <= 0):
+                raise ConfigError(
+                    f"[[comp.symmetric]][{idx}].advanced_placements='{adv}' must be a positive integer string or 'MAX' (xecmdref.pdf P460)."
+                )
         file_resolved = resolve_path(file_raw, emu_root, env_map, f"[[comp.symmetric]][{idx}].file")
         sym_list.append(CompSymmetricConfig(
             emulator=em,
@@ -975,10 +1005,7 @@ def _parse_comp(raw: dict[str, Any], emu_root: Path, env_map: dict[str, str], ma
             advanced_placements=adv,
         ))
 
-    target_scripts = [
-        resolve_path(p, emu_root, env_map, f"[comp].target_compile_scripts[{i}]")
-        for i, p in enumerate(_require_str_list(tbl.get("target_compile_scripts", []), "[comp].target_compile_scripts"))
-    ]
+    target_scripts = _resolve_path_list(tbl, "target_compile_scripts", "[comp].target_compile_scripts", emu_root, env_map)
     ice_prepare_explicit = "ice_prepare" in tbl
     ice_prepare = _require_bool(tbl["ice_prepare"], "[comp].ice_prepare") if ice_prepare_explicit else bool(target_scripts)
 
@@ -1003,15 +1030,12 @@ def _parse_ixcom(raw: dict[str, Any], default_queues: list[str]) -> IxcomConfig:
         return IxcomConfig(queues=list(default_queues))
     tbl = _require_table(raw["ixcom"], "ixcom")
     _check_keys(tbl, "ixcom", "ixcom")
-    c_mode = _require_str(tbl.get("compile_mode", "multi"), "[ixcom].compile_mode")
-    _check_enum(c_mode, VALID_IXCOM_COMPILE_MODES, "[ixcom].compile_mode")
     d_mode = _require_str(tbl.get("dump_mode", "online"), "[ixcom].dump_mode")
     _check_enum(d_mode, VALID_IXCOM_DUMP_MODES, "[ixcom].dump_mode")
     par = _require_int(tbl.get("parallel_hdlice", 4), "[ixcom].parallel_hdlice")
     if par < 0:
         raise ConfigError("[ixcom].parallel_hdlice must be >= 0.")
     return IxcomConfig(
-        compile_mode=c_mode,
         hw_mode=_require_bool(tbl.get("hw_mode", True), "[ixcom].hw_mode"),
         parallel_hdlice=par,
         dump_mode=d_mode,
@@ -1053,16 +1077,16 @@ def _parse_sim(raw: dict[str, Any], emu_root: Path, env_map: dict[str, str], def
         time_unit=_require_str(wave_tbl.get("time_unit", "ns"), "[sim.wave].time_unit"),
         trigger_pos=w_trig_pos,
         trace_mem_size=_require_str(wave_tbl.get("trace_mem_size", ""), "[sim.wave].trace_mem_size"),
-        probe_scripts=[
-            resolve_path(p, emu_root, env_map, f"[sim.wave].probe_scripts[{i}]")
-            for i, p in enumerate(_require_str_list(wave_tbl.get("probe_scripts", []), "[sim.wave].probe_scripts"))
-        ],
+        probe_scripts=_resolve_path_list(wave_tbl, "probe_scripts", "[sim.wave].probe_scripts", emu_root, env_map),
         probes=_require_str_list(wave_tbl.get("probes", []), "[sim.wave].probes"),
     )
 
     tdf_present = "tdf" in tbl
     tdf_tbl = _require_table(tbl.get("tdf", {}), "sim.tdf")
     _check_keys(tdf_tbl, "sim.tdf", "sim.tdf")
+    tdf_name = _require_str(tdf_tbl.get("name", "trigger.tdf"), "[sim.tdf].name")
+    if not tdf_name or "/" in tdf_name or "\\" in tdf_name or tdf_name in (".", "..") or PurePosixPath(tdf_name).name != tdf_name:
+        raise ConfigError(f"[sim.tdf].name='{tdf_name}' must be a valid plain filename without path separators.")
     tdf_file_raw = _require_str(tdf_tbl.get("tdf_file", ""), "[sim.tdf].tdf_file")
     tdf_trig_pos = _require_int(tdf_tbl["trigger_pos"], "[sim.tdf].trigger_pos") if "trigger_pos" in tdf_tbl else None
     if tdf_trig_pos is not None and not (0 <= tdf_trig_pos <= 100):
@@ -1072,6 +1096,15 @@ def _parse_sim(raw: dict[str, Any], emu_root: Path, env_map: dict[str, str], def
         raise ConfigError("[sim.tdf].post_trigger_samples must be >= 0.")
     if tdf_trig_pos is not None and post_samples is not None:
         raise ConfigError("[sim.tdf].trigger_pos and post_trigger_samples are mutually exclusive (SDL.pdf P137, P139).")
+
+    enable1 = _require_str(tdf_tbl.get("enable1", ""), "[sim.tdf].enable1")
+    enable2 = _require_str(tdf_tbl.get("enable2", ""), "[sim.tdf].enable2")
+    counter1 = _require_int(tdf_tbl["counter1"], "[sim.tdf].counter1") if "counter1" in tdf_tbl else None
+    if counter1 is not None and counter1 < 0:
+        raise ConfigError("[sim.tdf].counter1 must be >= 0 (SDL.pdf P143).")
+    counter2 = _require_int(tdf_tbl["counter2"], "[sim.tdf].counter2") if "counter2" in tdf_tbl else None
+    if counter2 is not None and counter2 < 0:
+        raise ConfigError("[sim.tdf].counter2 must be >= 0 (SDL.pdf P143).")
 
     aliases_tbl = _require_table(tdf_tbl.get("aliases", {}), "sim.tdf.aliases")
     aliases: dict[str, str] = {}
@@ -1088,22 +1121,36 @@ def _parse_sim(raw: dict[str, Any], emu_root: Path, env_map: dict[str, str], def
     triggers = _require_str_list(tdf_tbl.get("triggers", []), "[sim.tdf].triggers")
     extra_lines = _require_str_list(tdf_tbl.get("extra_lines", []), "[sim.tdf].extra_lines")
     scope = _require_str(tdf_tbl.get("scope", ""), "[sim.tdf].scope")
-    if tdf_file_raw and any(bool(x) for x in (scope, triggers, acquire, no_acquire, aliases, extra_lines)):
+    inline_values: tuple[Any, ...] = (
+        scope,
+        tdf_trig_pos,
+        post_samples,
+        enable1,
+        enable2,
+        counter1,
+        counter2,
+        aliases,
+        triggers,
+        acquire,
+        no_acquire,
+        extra_lines,
+    )
+    if tdf_file_raw and any((x is not None if isinstance(x, int) else bool(x)) for x in inline_values):
         raise ConfigError(
             "[sim.tdf].tdf_file cannot be combined with inline render fields "
             f"({', '.join(INLINE_TDF_RENDER_FIELDS)})."
         )
 
     tdf = SimTdfConfig(
-        name=_require_str(tdf_tbl.get("name", "trigger.tdf"), "[sim.tdf].name"),
+        name=tdf_name,
         tdf_file=resolve_path(tdf_file_raw, emu_root, env_map, "[sim.tdf].tdf_file"),
         scope=scope,
         trigger_pos=tdf_trig_pos,
         post_trigger_samples=post_samples,
-        enable1=_require_str(tdf_tbl.get("enable1", ""), "[sim.tdf].enable1"),
-        enable2=_require_str(tdf_tbl.get("enable2", ""), "[sim.tdf].enable2"),
-        counter1=_require_int(tdf_tbl["counter1"], "[sim.tdf].counter1") if "counter1" in tdf_tbl else None,
-        counter2=_require_int(tdf_tbl["counter2"], "[sim.tdf].counter2") if "counter2" in tdf_tbl else None,
+        enable1=enable1,
+        enable2=enable2,
+        counter1=counter1,
+        counter2=counter2,
         aliases=aliases,
         triggers=triggers,
         acquire=acquire,
@@ -1126,10 +1173,7 @@ def _parse_sim(raw: dict[str, Any], emu_root: Path, env_map: dict[str, str], def
             env_map,
             "[sim].target_relocate_script",
         ),
-        target_run_scripts=[
-            resolve_path(p, emu_root, env_map, f"[sim].target_run_scripts[{i}]")
-            for i, p in enumerate(_require_str_list(tbl.get("target_run_scripts", []), "[sim].target_run_scripts"))
-        ],
+        target_run_scripts=_resolve_path_list(tbl, "target_run_scripts", "[sim].target_run_scripts", emu_root, env_map),
         run_cmd=_require_str(tbl.get("run_cmd", ""), "[sim].run_cmd"),
         auto_exit=_require_bool(tbl.get("auto_exit", False), "[sim].auto_exit"),
         user_command_post_download=_require_str_list(tbl.get("user_command_post_download", []), "[sim].user_command_post_download"),
